@@ -9,7 +9,7 @@ const BASE_HEIGHT = 648;
 const layout = {
   cauldron: { x: 576, y: 480, w: 300 },
   recipeBook: { x: 190, y: 530, w: 100 },
-  crystal: { x: 900, y: 455, w: 50 },
+  crystal: { x: 900, y: 455, w: 36 },
   orderSheet: { x: 970, y: 150, w: 150 },
   bowl: { x: 900, y: 500, w: 140 },
 
@@ -90,13 +90,12 @@ class Level {
   }
 
   checkSequence() {
-    // Only check sequence if at least as many ingredients as the recipe
-    if (this.addedIngredients.length < this.correctOrder.length) return;
-
-    // Compare each ingredient in order
-    const isCorrect = this.correctOrder.every(
-      (bottleImg, index) => this.addedIngredients[index] === bottleImg,
-    );
+    // Compare only the bottle ingredients (exclude crystal) against the correct order
+    const isCorrect =
+      this.addedIngredients.length === this.correctOrder.length &&
+      this.correctOrder.every(
+        (bottleImg, index) => this.addedIngredients[index] === bottleImg,
+      );
 
     this.levelResult = isCorrect ? "CORRECT" : "WRONG";
   }
@@ -128,17 +127,34 @@ class Level {
     );
     pop();
 
-    // ---- CAULDRON ----
-    const c = layout.cauldron;
-    const cHeight =
-      (this.assets.cauldronImg.height / this.assets.cauldronImg.width) * c.w;
-    image(this.assets.cauldronImg, c.x, c.y, c.w, cHeight);
-
     // ---- BOWL ----
     const b = layout.bowl;
     const bHeight =
       (this.assets.bowlImg.height / this.assets.bowlImg.width) * b.w;
     image(this.assets.bowlImg, b.x, b.y, b.w, bHeight);
+
+    // ---- CRYSTAL — draw BEHIND cauldron only during the drop phase ----
+    const crystal = this.bottles.find((b) => b.isCrystal);
+    if (
+      crystal &&
+      !crystal.used &&
+      crystal.isMoving &&
+      crystal.progress >= 0.6
+    ) {
+      const cw = layout.crystal.w;
+      const ch = (crystal.img.height / crystal.img.width) * cw;
+      push();
+      translate(crystal.x, crystal.y);
+      noStroke();
+      image(crystal.img, 0, 0, cw, ch);
+      pop();
+    }
+
+    // ---- CAULDRON ----
+    const c = layout.cauldron;
+    const cHeight =
+      (this.assets.cauldronImg.height / this.assets.cauldronImg.width) * c.w;
+    image(this.assets.cauldronImg, c.x, c.y, c.w, cHeight);
 
     // ---- RECIPE BOOK ----
     const r = layout.recipeBook;
@@ -147,9 +163,7 @@ class Level {
         this.assets.recipeBookClosed.width) *
       r.w;
 
-    // ---- OPEN RECIPE BOOK OVERLAY ----
     if (this.isRecipeOpen) {
-      // Dim background
       push();
       fill(0, 150);
       rectMode(CORNER);
@@ -159,32 +173,26 @@ class Level {
       const openBook = this.assets.recipeBookOpen;
       const bookWidth = 600;
       const bookHeight = (openBook.height / openBook.width) * bookWidth;
-
-      // Draw centered open book
       imageMode(CENTER);
       image(openBook, BASE_WIDTH / 2, BASE_HEIGHT / 2, bookWidth, bookHeight);
 
-      // Top-left corner of book (for positioning text & button)
       const bookLeft = BASE_WIDTH / 2 - bookWidth / 2;
       const bookTop = BASE_HEIGHT / 2 - bookHeight / 2;
 
-      // ---- Recipe Instructions ----
       const textX = BASE_WIDTH / 2 - bookWidth / 2 + 40;
       let textY = BASE_HEIGHT / 2 - bookHeight / 2 + 50;
       const lineHeight = 30;
       const symbolWidth = 20;
 
-      // Title
       textSize(18);
       textStyle(BOLD);
       fill(0);
-      text("Beginner’s Luck", textX, textY);
+      text("Beginner's Luck", textX, textY);
       textStyle(NORMAL);
       textSize(14);
       textAlign(LEFT, TOP);
       textY += lineHeight * 2;
 
-      // Step 1
       text("1. Pour a vial of ", textX, textY);
       image(
         greenSymbol,
@@ -201,7 +209,6 @@ class Level {
       );
       textY += lineHeight;
 
-      // Step 2
       text("2. Mix in ", textX, textY + 20);
       image(
         blueSymbol,
@@ -213,7 +220,6 @@ class Level {
       text(" to strengthen the brew.", textX + 84, textY + 20);
       textY += lineHeight;
 
-      // Step 3
       text("3. Add ", textX, textY + 20);
       image(
         orangeSymbol,
@@ -225,7 +231,6 @@ class Level {
       text("to bind the ingredients.", textX + 80, textY + 20);
       textY += lineHeight;
 
-      // Step 4
       text("4. Drop in ", textX, textY + 26);
       image(
         crystalImg,
@@ -237,11 +242,9 @@ class Level {
       text(" to seal the spell and", textX + 95, textY + 26);
       text("awaken its magic.", textX + 16, textY + lineHeight + 16);
 
-      // ---- Close Button ----
       const btnSize = 30;
       const btnX = bookLeft + bookWidth - btnSize / 2;
       const btnY = bookTop + btnSize / 2;
-
       push();
       rectMode(CENTER);
       fill(255, 0, 0);
@@ -253,7 +256,7 @@ class Level {
       text("X", btnX, btnY);
       pop();
 
-      return; // prevent clicks behind overlay
+      return;
     }
 
     // Draw closed book
@@ -262,51 +265,37 @@ class Level {
     // ---- Bottles ----
     this.bottles.forEach((b) => {
       if (b.isMoving) {
-        const speed = 0.02;
+        const speed = b.isCrystal ? (b.progress < 0.6 ? 0.012 : 0.008) : 0.02;
         b.progress += speed;
 
         if (b.isCrystal) {
-          // --- CRYSTAL ANIMATION ---
-          const targetX = layout.cauldron.x; // center of cauldron
-
+          const targetX = layout.cauldron.x;
           const cauldronHeight =
             (this.assets.cauldronImg.height / this.assets.cauldronImg.width) *
             layout.cauldron.w;
+          const pauseY = layout.cauldron.y - cauldronHeight / 2 - 90;
+          const finalY = layout.cauldron.y + cauldronHeight / 4;
 
-          const pauseY = layout.cauldron.y - cauldronHeight / 2 - 40; // above cauldron
-          const finalY = layout.cauldron.y + cauldronHeight / 4; // behind cauldron
-
-          // Phase 1: move from start to above cauldron (0 → 0.6)
           if (b.progress < 0.6) {
             const t = b.progress / 0.6;
             b.x = lerp(b.startX, targetX, t);
             b.y = lerp(b.startY, pauseY, t);
-
-            // Phase 2: drop behind cauldron (0.6 → 1)
           } else if (b.progress < 1) {
-            const t = (b.progress - 0.6) / 0.4; // normalize 0→1 for drop
+            const t = (b.progress - 0.6) / 0.4;
             b.x = targetX;
             b.y = lerp(pauseY, finalY, t);
-
-            // End movement
           } else {
             b.isMoving = false;
             b.isSelected = false;
             b.progress = 0;
             b.x = targetX;
             b.y = finalY;
-            b.used = true; // mark as used
+            b.used = true;
             this.crystalAdded = true;
-
-            if (!this.addedIngredients.includes(b.img)) {
-              this.addedIngredients.push(b.img);
-              console.log("Added crystal!");
-            }
 
             this.checkSequence();
           }
         } else {
-          // --- REGULAR BOTTLE ANIMATION ---
           const targetX = layout.cauldron.x - 20;
           const targetY = layout.cauldron.y - 160;
 
@@ -330,16 +319,21 @@ class Level {
             b.progress = 0;
             b.x = b.startX;
             b.y = b.startY;
-
-            if (this.crystalAdded) {
-              this.checkSequence();
-            }
           }
         }
       }
 
       // ---- Draw bottle ----
-      const bottleWidth = layout.shelf.bottleWidth;
+
+      // Skip crystal during drop phase — already drawn behind cauldron above
+      if (b.isCrystal && !b.used && b.isMoving && b.progress >= 0.6) return;
+
+      // Don't draw crystal once it's fully inside the cauldron
+      if (b.isCrystal && b.used) return;
+
+      const bottleWidth = b.isCrystal
+        ? layout.crystal.w
+        : layout.shelf.bottleWidth;
       const bottleHeight = (b.img.height / b.img.width) * bottleWidth;
 
       push();
@@ -347,7 +341,7 @@ class Level {
 
       let angle = 0;
       if (!b.isCrystal && b.isMoving && b.progress >= 0.5 && b.progress < 2) {
-        angle = PI / 2.5; // tilt regular bottles
+        angle = PI / 2.5;
       }
 
       rotate(angle);
@@ -365,7 +359,7 @@ class Level {
       pop();
     });
 
-    // Show result if the sequence has been completed
+    // Show result
     if (this.levelResult) {
       push();
       textAlign(CENTER, CENTER);
@@ -399,13 +393,11 @@ class Level {
   pourSelectedBottle() {
     if (!this.selectedBottle || this.selectedBottle.isMoving) return;
 
+    // Lock gameplay once crystal has been added
+    if (this.crystalAdded && !this.selectedBottle.isCrystal) return;
+
     this.selectedBottle.isMoving = true;
     this.selectedBottle.progress = 0;
-
-    if (this.selectedBottle.isCrystal) {
-      // mark crystal as added
-      this.crystalAdded = true;
-    }
   }
 }
 
