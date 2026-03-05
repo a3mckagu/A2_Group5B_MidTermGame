@@ -187,7 +187,7 @@ class Level {
       textSize(18);
       textStyle(BOLD);
       fill(0);
-      text("Beginner's Luck", textX, textY);
+      text("Beginner's Luck", textX + 100, textY);
       textStyle(NORMAL);
       textSize(14);
       textAlign(LEFT, TOP);
