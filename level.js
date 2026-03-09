@@ -12,6 +12,7 @@ const layout = {
   crystal: { x: 900, y: 455, w: 36 },
   orderSheet: { x: 970, y: 150, w: 150 },
   bowl: { x: 900, y: 500, w: 140 },
+  envelope: { x: 1100, y: 50, w: 50 },
 
   shelf: {
     x: 120, // starting X position of the first bottle on the shelf
@@ -77,6 +78,9 @@ class Level {
 
     this.selectedBottle = null;
     this.isRecipeOpen = false;
+    this.isOrderOpen = false;
+    this.hasUnreadOrder = true;
+    this.envelopeScale = 1;
 
     // --- SEQUENCE TRACKING ---
     this.addedIngredients = [];
@@ -368,6 +372,133 @@ class Level {
       text(this.levelResult, BASE_WIDTH / 2, BASE_HEIGHT / 2);
       pop();
     }
+
+    // ---- ENVELOPE ICON ----
+    const env = layout.envelope;
+    const envHeight =
+      (this.assets.envelopeImg.height / this.assets.envelopeImg.width) * env.w;
+
+    // Check if mouse is hovering over envelope
+    const scaleFactor = min(width / BASE_WIDTH, height / BASE_HEIGHT);
+    const offsetX = (width - BASE_WIDTH * scaleFactor) / 2;
+    const offsetY = (height - BASE_HEIGHT * scaleFactor) / 2;
+    const adjustedMX = (mouseX - offsetX) / scaleFactor;
+    const adjustedMY = (mouseY - offsetY) / scaleFactor;
+    const isEnvHovered =
+      adjustedMX > env.x - env.w / 2 &&
+      adjustedMX < env.x + env.w / 2 &&
+      adjustedMY > env.y - envHeight / 2 &&
+      adjustedMY < env.y + envHeight / 2;
+
+    // Smooth scale transition
+    const targetScale = isEnvHovered ? 1.1 : 1;
+    this.envelopeScale = lerp(this.envelopeScale, targetScale, 0.25);
+
+    push();
+    translate(env.x, env.y);
+    scale(this.envelopeScale);
+    image(this.assets.envelopeImg, 0, 0, env.w, envHeight);
+    pop();
+
+    // Draw notification badge if unread
+    if (this.hasUnreadOrder) {
+      push();
+      const badgeX = env.x + env.w / 2 - 5;
+      const badgeY = env.y - envHeight / 2 + 5;
+
+      // Pulsing ring effect behind the badge
+      const pulse = (sin(frameCount * 0.05) + 1) / 2; // 0 to 1
+      const ringRadius = 14 + pulse * 10; // 14 to 24
+      const ringAlpha = 150 * (1 - pulse); // 150 to 0
+      fill(208, 0, 0, ringAlpha);
+      noStroke();
+      ellipse(badgeX, badgeY, ringRadius * 2, ringRadius * 2);
+
+      // Solid badge circle
+      fill("#D00000");
+      noStroke();
+      ellipse(badgeX, badgeY, 26, 26);
+      fill(255);
+      textAlign(CENTER, CENTER);
+      textFont("VT323");
+      textSize(18);
+      textStyle(BOLD);
+      text("1", badgeX, badgeY);
+      pop();
+    }
+
+    // ---- ORDER OVERLAY ----
+    if (this.isOrderOpen) {
+      push();
+      fill(0, 150);
+      rectMode(CORNER);
+      rect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+      pop();
+
+      // Draw order card
+      const cardWidth = 400;
+      const cardHeight = 500;
+      push();
+      rectMode(CENTER);
+      fill(245, 235, 220);
+      stroke(139, 90, 43);
+      strokeWeight(3);
+      rect(BASE_WIDTH / 2, BASE_HEIGHT / 2, cardWidth, cardHeight, 15);
+      pop();
+
+      const cardLeft = BASE_WIDTH / 2 - cardWidth / 2;
+      const cardTop = BASE_HEIGHT / 2 - cardHeight / 2;
+
+      // Order content
+      push();
+      textAlign(LEFT, TOP);
+      textSize(24);
+      textStyle(BOLD);
+      fill(60, 30, 10);
+      text("Order", cardLeft + 30, cardTop + 30);
+
+      textStyle(NORMAL);
+      textSize(16);
+      let textY = cardTop + 80;
+      const lineHeight = 28;
+
+      text("Customer:", cardLeft + 30, textY);
+      textStyle(BOLD);
+      text("Lord Alistair", cardLeft + 120, textY);
+      textStyle(NORMAL);
+      textY += lineHeight * 1.5;
+
+      text("Potion:", cardLeft + 30, textY);
+      textStyle(BOLD);
+      text("Beginner's Luck", cardLeft + 100, textY);
+      textStyle(NORMAL);
+      textY += lineHeight * 2;
+
+      text("Description:", cardLeft + 30, textY);
+      textY += lineHeight;
+      textSize(14);
+      text("A simple potion to help with fortune", cardLeft + 30, textY);
+      textY += lineHeight * 0.8;
+      text("and bring good luck to the drinker.", cardLeft + 30, textY);
+      pop();
+
+      // Close button
+      const btnSize = 30;
+      const btnX = cardLeft + cardWidth - btnSize / 2;
+      const btnY = cardTop + btnSize / 2;
+      push();
+      rectMode(CENTER);
+      fill(255, 0, 0);
+      noStroke();
+      rect(btnX, btnY, btnSize, btnSize, 5);
+      fill(255);
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      text("X", btnX, btnY);
+      pop();
+
+      return;
+    }
   }
 
   selectBottle(mx, my) {
@@ -446,6 +577,46 @@ function levelMousePressed() {
     adjustedY < c.y + cHeight / 2
   ) {
     levelInstance.pourSelectedBottle();
+  }
+
+  // ---- Order Overlay Close Button ----
+  if (levelInstance.isOrderOpen) {
+    const cardWidth = 400;
+    const cardHeight = 500;
+    const cardLeft = BASE_WIDTH / 2 - cardWidth / 2;
+    const cardTop = BASE_HEIGHT / 2 - cardHeight / 2;
+
+    const btnSize = 30;
+    const btnX = cardLeft + cardWidth - btnSize / 2;
+    const btnY = cardTop + btnSize / 2;
+
+    if (
+      adjustedX > btnX - btnSize / 2 &&
+      adjustedX < btnX + btnSize / 2 &&
+      adjustedY > btnY - btnSize / 2 &&
+      adjustedY < btnY + btnSize / 2
+    ) {
+      levelInstance.isOrderOpen = false;
+      return;
+    }
+    return; // block clicks behind overlay
+  }
+
+  // ---- Envelope Icon Click ----
+  const env = layout.envelope;
+  const envHeight =
+    (levelInstance.assets.envelopeImg.height /
+      levelInstance.assets.envelopeImg.width) *
+    env.w;
+  if (
+    adjustedX > env.x - env.w / 2 &&
+    adjustedX < env.x + env.w / 2 &&
+    adjustedY > env.y - envHeight / 2 &&
+    adjustedY < env.y + envHeight / 2
+  ) {
+    levelInstance.isOrderOpen = true;
+    levelInstance.hasUnreadOrder = false;
+    return;
   }
 
   // ---- Recipe Book Close Button ----

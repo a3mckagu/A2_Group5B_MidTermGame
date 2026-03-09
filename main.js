@@ -20,7 +20,7 @@
 // We store the “name” of the current screen as a string.
 // Only one screen should be active at a time.
 
-let currentScreen = "start";
+let currentScreen = "level";
 let levelData;
 let level;
 let levelInstance;
@@ -28,9 +28,15 @@ let levelInstance;
 let potionaryLogo, potionaryLogoDetail, startBg, levelMenu;
 let levelBg, orderSheet, cauldronImg, recipeBookClosed, recipeBookOpen;
 let bottleGreen, bottleRed, bottleBlue, bottleOrange, bottlePink;
-let crystalImg, bowlImg;
+let crystalImg, bowlImg, envelopeImg;
 let greenSymbol, blueSymbol, orangeSymbol;
 let mapIcon1, mapIcon2, mapIcon3, mapIcon4;
+
+// Font names for use with textFont()
+const FONT_MANUFACTURING_CONSENT = "Manufacturing Consent";
+const FONT_IM_FELL_ENGLISH = "IM Fell English";
+const FONT_VT323 = "VT323";
+const FONT_MONSIEUR_LA_DOULAISE = "Monsieur La Doulaise";
 
 // ------------------------------
 // preload() runs BEFORE setup() to load assets
@@ -58,6 +64,7 @@ function preload() {
 
   crystalImg = loadImage("assets/crystal/crystal-v2.svg");
   bowlImg = loadImage("assets/crystal/bowl.png");
+  envelopeImg = loadImage("assets/order/envelope.png");
 
   greenSymbol = loadImage("assets/symbols/green-symbol.svg");
   blueSymbol = loadImage("assets/symbols/blue-symbol.svg");
@@ -70,6 +77,12 @@ function preload() {
   mapIcon4 = loadImage("assets/background/map-icon_4.svg");
 
   levelData = loadJSON("levels.json");
+
+  // Preload Google Fonts
+  document.fonts.load('16px "Manufacturing Consent"');
+  document.fonts.load('16px "IM Fell English"');
+  document.fonts.load('16px "VT323"');
+  document.fonts.load('16px "Monsieur La Doulaise"');
 }
 
 // ------------------------------
@@ -91,6 +104,7 @@ function setup() {
     bottlePink,
     crystalImg,
     bowlImg,
+    envelopeImg,
   });
 }
 
