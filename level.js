@@ -354,7 +354,29 @@ class Level {
       // Position dropZone.y so bottom of the ellipse matches ringBottom
       this.dropZone.y = ringBottom - this.dropZone.actualRy;
 
-      // Debug ellipse removed — hit area is now invisible in normal gameplay
+      // Debug: draw the drop-zone hitbox rectangle for tuning
+      push();
+      rectMode(CENTER);
+      noFill();
+      stroke(255, 255, 255, 180);
+      strokeWeight(1.4);
+      rect(
+        this.dropZone.x,
+        this.dropZone.y,
+        this.dropZone.actualRx * 2,
+        this.dropZone.actualRy * 2,
+      );
+      // Also draw center and bottom marker for clarity
+      stroke(255, 200);
+      strokeWeight(1);
+      point(this.dropZone.x, this.dropZone.y);
+      line(
+        this.dropZone.x,
+        this.dropZone.y + this.dropZone.actualRy,
+        this.dropZone.x,
+        this.dropZone.y + this.dropZone.actualRy + 6,
+      );
+      pop();
     }
 
     // ---- RECIPE BOOK ----
@@ -506,24 +528,25 @@ class Level {
             ? this.dropZone.bottom
             : this.dropZone.y + ry;
 
-        // Use the white hit ellipse (matching the ring) when available
-        const effectiveRx =
-          this.dropZone.actualRx ||
-          rxBottom ||
-          this.dropZone.rx ||
-          this.dropZone.r ||
-          0;
-        const effectiveRy =
-          this.dropZone.actualRy || ry || this.dropZone.r || 0;
+        // Use rectangular hitbox (centered) when available
+        const halfW =
+          this.dropZone.actualRx || rxBottom || this.dropZone.rx || this.dropZone.r || 0;
+        const halfH = this.dropZone.actualRy || ry || this.dropZone.r || 0;
 
-        const insideEllipse =
-          effectiveRx > 0 &&
-          effectiveRy > 0 &&
-          (dx * dx) / (effectiveRx * effectiveRx) +
-            (dy * dy) / (effectiveRy * effectiveRy) <=
-            1;
+        const left = this.dropZone.x - halfW;
+        const right = this.dropZone.x + halfW;
+        const top = this.dropZone.y - halfH;
+        const bottom = this.dropZone.y + halfH;
 
-        if (insideEllipse) {
+        const insideRect =
+          halfW > 0 &&
+          halfH > 0 &&
+          vial.x >= left &&
+          vial.x <= right &&
+          vial.y >= top &&
+          vial.y <= bottom;
+
+        if (insideRect) {
           // Auto-drop: bottle pours in place, then returns to shelf
           vial.droppedFromHeld = true;
           vial.pourX = vial.x;
@@ -685,6 +708,113 @@ class Level {
       noStroke();
       image(vial.img, 0, 0, vial.width, vial.height);
       pop();
+
+      // ---- LIQUID STREAM during pour ----
+      // Draw a natural-looking liquid stream when bottle is tilted and pouring
+      const isPouringDropped = vial.droppedFromHeld && vial.progress > 0.15 && vial.progress < 1.4;
+      const isPouringOriginal = !vial.droppedFromHeld && vial.progress >= 0.6 && vial.progress < 1.45;
+      const isPouring = !vial.isCrystal && vial.isMoving && (isPouringDropped || isPouringOriginal);
+
+      if (isPouring && this.dropZone) {
+        push();
+        // Compute angle for tilt direction
+        const baseTilt = PI / 3.5;
+        const isRightSide = vial.x > this.dropZone.x;
+        const tiltDir = isRightSide ? -1 : 1;
+
+        // Compute current tilt amount for stream visibility
+        let tiltAmount = 0;
+        if (vial.droppedFromHeld) {
+          const rampDuration = 0.6;
+          const t = constrain(vial.progress / rampDuration, 0, 1);
+          tiltAmount = sin((t * PI) / 2);
+        } else {
+          const rampStart = 0.5;
+          const rampEnd = 1.0;
+          let t = 1;
+          if (vial.progress < rampEnd) {
+            t = constrain((vial.progress - rampStart) / (rampEnd - rampStart), 0, 1);
+            t = sin((t * PI) / 2);
+          }
+          tiltAmount = t;
+        }
+
+        // Only draw stream once tilt is significant
+        if (tiltAmount > 0.3) {
+          // Calculate bottle opening position (top of bottle, offset by tilt)
+          const openingOffsetX = tiltDir * (vial.height / 2) * sin(baseTilt * tiltAmount);
+          const openingOffsetY = -(vial.height / 2) * cos(baseTilt * tiltAmount);
+          const streamStartX = vial.x + openingOffsetX * vial.scale;
+          const streamStartY = vial.y + openingOffsetY * vial.scale;
+
+          // Stream ends at the bottom of the drop zone, aligned under the opening
+          const streamEndY = this.dropZone.y + this.dropZone.actualRy;
+          const halfW = this.dropZone.actualRx || this.dropZone.rx || this.dropZone.r || 0;
+          const left = this.dropZone.x - halfW;
+          const right = this.dropZone.x + halfW;
+          // target directly below the opening, clamped to the hitbox horizontal bounds
+          let streamEndX = constrain(streamStartX, left + 4, right - 4);
+          // Nudge slightly towards the center-of-hitbox depending on pour side
+          const nudge = 8;
+          if (streamStartX < this.dropZone.x) {
+            // pouring from left: nudge right
+            streamEndX = min(streamEndX + nudge, right - 2);
+          } else {
+            // pouring from right: nudge left
+            streamEndX = max(streamEndX - nudge, left + 2);
+          }
+
+          // Stream colour based on vial
+          const colourMap = {
+            green: color(72, 180, 72, 200),
+            red: color(200, 50, 50, 200),
+            blue: color(60, 120, 220, 200),
+            orange: color(230, 140, 40, 200),
+            pink: color(220, 100, 160, 200),
+          };
+          const streamColour = colourMap[vial.colour] || color(150, 150, 150, 200);
+
+          // Animated wave offset for natural flow
+          const waveSpeed = 0.15;
+          const waveAmp = 4;
+          const timeOffset = frameCount * waveSpeed;
+
+          // Draw multiple bezier curves for a thicker, more organic stream
+          noFill();
+          strokeWeight(5);
+          stroke(streamColour);
+
+          // Control points for bezier — creates a gentle arc
+          const cp1x = streamStartX + tiltDir * 15 + sin(timeOffset) * waveAmp;
+          const cp1y = lerp(streamStartY, streamEndY, 0.3);
+          const cp2x = streamEndX + sin(timeOffset + 1.5) * waveAmp * 0.5;
+          const cp2y = lerp(streamStartY, streamEndY, 0.7);
+
+          bezier(
+            streamStartX, streamStartY,
+            cp1x, cp1y,
+            cp2x, cp2y,
+            streamEndX, streamEndY
+          );
+
+          // Draw a thinner highlight for depth
+          strokeWeight(2);
+          stroke(red(streamColour) + 40, green(streamColour) + 40, blue(streamColour) + 40, 150);
+          bezier(
+            streamStartX - tiltDir * 1.5, streamStartY,
+            cp1x - tiltDir * 1, cp1y,
+            cp2x, cp2y,
+            streamEndX, streamEndY
+          );
+
+          // Small splash/drip effect at the end
+          noStroke();
+          fill(streamColour);
+          const splashSize = 6 + sin(timeOffset * 2) * 2;
+          ellipse(streamEndX, streamEndY, splashSize, splashSize * 0.6);
+        }
+        pop();
+      }
     });
 
     // Show result
