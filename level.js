@@ -201,6 +201,7 @@ class Level {
         droppedFromHeld: false,
         pourX: 0,
         pourY: 0,
+        lift: 0,
       });
     });
 
@@ -233,6 +234,7 @@ class Level {
         droppedFromHeld: false,
         pourX: 0,
         pourY: 0,
+        lift: 0,
       });
     }
 
@@ -689,6 +691,29 @@ class Level {
       // Smooth scale transition for pick-up/drop effect
       vial.scale = lerp(vial.scale, vial.targetScale, 0.18);
 
+      // Hover detection and smooth lift: lift a bit when the mouse is over
+      // the vial and it's not being held or moved.
+      const {
+        scaleFactor: _sf,
+        offsetX: _ox,
+        offsetY: _oy,
+      } = getScaleAndOffset();
+      const adjustedMX_v = (mouseX - _ox) / _sf;
+      const adjustedMY_v = (mouseY - _oy) / _sf;
+      const halfW_v = vial.width * 0.5 * vial.scale;
+      const halfH_v = vial.height * 0.5 * vial.scale;
+      const isHoverV =
+        !vial.isHeld &&
+        !vial.isMoving &&
+        adjustedMX_v > vial.x - halfW_v &&
+        adjustedMX_v < vial.x + halfW_v &&
+        adjustedMY_v > vial.y - halfH_v &&
+        adjustedMY_v < vial.y + halfH_v;
+      // Subtle lift on hover: smaller offset and gentler interpolation
+      const targetLift = isHoverV ? -3 : 0; // negative Y moves up (reduced from -4)
+      vial.lift = vial.lift === undefined ? 0 : vial.lift;
+      vial.lift = lerp(vial.lift, targetLift, 0.22);
+
       if (vial.isMoving) {
         const speed = vial.isCrystal
           ? vial.progress < 0.6
@@ -992,7 +1017,9 @@ class Level {
 
       // Now draw the vial on top of the stream
       push();
-      translate(vial.x, vial.y);
+      // Apply hover lift (vertical offset) when translating to draw position
+      const drawY = vial.y + (vial.lift || 0);
+      translate(vial.x, drawY);
       scale(vial.scale);
 
       let angle = 0;
