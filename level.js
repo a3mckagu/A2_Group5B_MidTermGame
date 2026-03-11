@@ -25,10 +25,11 @@ const layout = {
   envelope: { x: 1100, y: 50, w: 50 },
 
   shelf: {
-    x: 120, // starting X position of the first bottle on the shelf
-    y: 132, // Y position for all bottles on the shelf
-    spacing: 80, // horizontal distance between consecutive bottles
+    x: 80, // starting X position of the first bottle on the shelf (moved left)
+    y: 116, // Y position for all bottles on the shelf (moved up)
+    spacing: 75, // horizontal distance between consecutive bottles
     bottleWidth: 38, // width of each bottle
+    rowSpacing: 20, // vertical gap between rows (tunable)
   },
 };
 
@@ -40,34 +41,88 @@ class Level {
     // Define all vials (regular bottles + crystal) with their properties
     const vialsConfig = [
       {
-        id: "green",
-        img: assets.bottleGreen,
+        id: "black",
+        img: assets.bottleBlack,
+        openImg: assets.bottleOpenBlack,
         symbol: assets.greenSymbol,
-        colour: "green",
+        colour: "black",
       },
       {
-        id: "red",
-        img: assets.bottleRed,
-        symbol: assets.greenSymbol, // Note: red has same symbol as green for now
-        colour: "red",
+        id: "darkgreen",
+        img: assets.bottleDarkgreen,
+        openImg: assets.bottleOpenDarkgreen,
+        symbol: assets.greenSymbol,
+        colour: "darkgreen",
       },
       {
-        id: "blue",
-        img: assets.bottleBlue,
+        id: "darkpurple",
+        img: assets.bottleDarkpurple,
+        openImg: assets.bottleOpenDarkpurple,
+        symbol: assets.greenSymbol,
+        colour: "darkpurple",
+      },
+      {
+        id: "lightblue",
+        img: assets.bottleLightblue,
+        openImg: assets.bottleOpenLightblue,
         symbol: assets.blueSymbol,
-        colour: "blue",
+        colour: "lightblue",
       },
       {
-        id: "orange",
-        img: assets.bottleOrange,
+        id: "lightgreen",
+        img: assets.bottleLightgreen,
+        openImg: assets.bottleOpenLightgreen,
+        symbol: assets.greenSymbol,
+        colour: "lightgreen",
+      },
+      {
+        id: "lightpink",
+        img: assets.bottleLightpink,
+        openImg: assets.bottleOpenLightpink,
+        symbol: assets.greenSymbol,
+        colour: "lightpink",
+      },
+      {
+        id: "lightpurple",
+        img: assets.bottleLightpurple,
+        openImg: assets.bottleOpenLightpurple,
+        symbol: assets.greenSymbol,
+        colour: "lightpurple",
+      },
+      {
+        id: "lightred",
+        img: assets.bottleLightred,
+        openImg: assets.bottleOpenLightred,
         symbol: assets.orangeSymbol,
-        colour: "orange",
+        colour: "lightred",
       },
       {
-        id: "pink",
-        img: assets.bottlePink,
-        symbol: assets.greenSymbol, // Note: pink has same symbol as green for now
-        colour: "pink",
+        id: "midblue",
+        img: assets.bottleMidblue,
+        openImg: assets.bottleOpenMidblue,
+        symbol: assets.blueSymbol,
+        colour: "midblue",
+      },
+      {
+        id: "closedOrange",
+        img: assets.bottleClosedOrange,
+        openImg: assets.bottleOpenOrange,
+        symbol: assets.orangeSymbol,
+        colour: "closedOrange",
+      },
+      {
+        id: "teal",
+        img: assets.bottleTeal,
+        openImg: assets.bottleOpenTeal,
+        symbol: assets.blueSymbol,
+        colour: "teal",
+      },
+      {
+        id: "yellow",
+        img: assets.bottleYellow,
+        openImg: assets.bottleOpenYellow,
+        symbol: assets.orangeSymbol,
+        colour: "yellow",
       },
       {
         id: "crystal",
@@ -80,7 +135,23 @@ class Level {
 
     // Initialize vials array with runtime state
     this.vials = [];
-    const maxPerRow = 3; // max bottles per row
+    const maxPerRow = 4; // max bottles per row
+
+    // Compute a uniform row height (based on the tallest bottle) so
+    // vertical spacing between rows remains even regardless of
+    // per-vial image aspect variations. Center each bottle vertically
+    // within its row cell.
+    const nonCrystalHeights = vialsConfig
+      .filter((c) => !c.isCrystal)
+      .map((c) => {
+        const w = c.overrideWidth || layout.shelf.bottleWidth;
+        return (c.img.height / c.img.width) * w;
+      });
+    const rowHeight = nonCrystalHeights.length
+      ? Math.max(...nonCrystalHeights)
+      : layout.shelf.bottleWidth;
+
+    const rowGap = layout.shelf.rowSpacing || 20;
 
     vialsConfig.forEach((config, i) => {
       let x, y, w, h;
@@ -93,19 +164,23 @@ class Level {
         x = cr.x;
         y = cr.y;
       } else {
-        // Regular bottles positioned on shelf
-        w = layout.shelf.bottleWidth;
+        // Regular bottles positioned on shelf (allow per-vial override)
+        w = config.overrideWidth || layout.shelf.bottleWidth;
         h = (config.img.height / config.img.width) * w;
 
         const row = Math.floor(i / maxPerRow);
         const col = i % maxPerRow;
 
         x = layout.shelf.x + col * layout.shelf.spacing;
-        y = layout.shelf.y + row * (h + 20);
+        // Use uniform rowHeight + rowGap for even spacing, and vertically
+        // center bottles that are shorter than the row cell.
+        y = layout.shelf.y + row * (rowHeight + rowGap) + (rowHeight - h) / 2;
       }
 
       this.vials.push({
         ...config,
+        closedImg: config.img,
+        openImg: config.openImg || config.img,
         x,
         y,
         startX: x,
@@ -530,7 +605,11 @@ class Level {
 
         // Use rectangular hitbox (centered) when available
         const halfW =
-          this.dropZone.actualRx || rxBottom || this.dropZone.rx || this.dropZone.r || 0;
+          this.dropZone.actualRx ||
+          rxBottom ||
+          this.dropZone.rx ||
+          this.dropZone.r ||
+          0;
         const halfH = this.dropZone.actualRy || ry || this.dropZone.r || 0;
 
         const left = this.dropZone.x - halfW;
@@ -605,9 +684,9 @@ class Level {
               // Pouring phase (tilting happens during this)
               vial.x = vial.pourX;
               vial.y = vial.pourY;
-              if (!this.addedIngredients.includes(vial.img)) {
-                this.addedIngredients.push(vial.img);
-                console.log("Added ingredient:", vial.img);
+              if (!this.addedIngredients.includes(vial.closedImg)) {
+                this.addedIngredients.push(vial.closedImg);
+                console.log("Added ingredient:", vial.closedImg);
               }
             } else if (vial.progress < 2.5) {
               // Return to shelf
@@ -623,6 +702,7 @@ class Level {
               vial.y = vial.startY;
               // restore normal scale and clear dropped flag
               vial.targetScale = 1.0;
+              vial.img = vial.closedImg;
               vial.droppedFromHeld = false;
             }
           } else {
@@ -636,9 +716,9 @@ class Level {
             } else if (vial.progress < 1.5) {
               vial.x = targetX;
               vial.y = targetY;
-              if (!this.addedIngredients.includes(vial.img)) {
-                this.addedIngredients.push(vial.img);
-                console.log("Added ingredient:", vial.img);
+              if (!this.addedIngredients.includes(vial.closedImg)) {
+                this.addedIngredients.push(vial.closedImg);
+                console.log("Added ingredient:", vial.closedImg);
               }
             } else if (vial.progress < 2.5) {
               const back = vial.progress - 1.5;
@@ -650,6 +730,8 @@ class Level {
               vial.progress = 0;
               vial.x = vial.startX;
               vial.y = vial.startY;
+              // restore closed appearance after returning to shelf
+              vial.img = vial.closedImg;
             }
           }
         }
@@ -664,6 +746,206 @@ class Level {
       // Don't draw crystal once it's fully inside the cauldron
       if (vial.isCrystal && vial.used) return;
 
+      // ---- LIQUID STREAM during pour (drawn behind the vial)
+      // Draw a natural-looking liquid stream when bottle is tilted and pouring
+      const isPouringDropped =
+        vial.droppedFromHeld && vial.progress > 0.15 && vial.progress < 1.4;
+      const isPouringOriginal =
+        !vial.droppedFromHeld && vial.progress >= 0.6 && vial.progress < 1.45;
+      const isPouring =
+        !vial.isCrystal &&
+        vial.isMoving &&
+        (isPouringDropped || isPouringOriginal);
+
+      if (isPouring && this.dropZone) {
+        // Compute angle for tilt direction
+        const baseTilt = PI / 3.5;
+        const isRightSide = vial.x > this.dropZone.x;
+        const tiltDir = isRightSide ? -1 : 1;
+
+        // Compute current tilt amount for stream visibility
+        let tiltAmount = 0;
+        if (vial.droppedFromHeld) {
+          const rampDuration = 0.6;
+          const t = constrain(vial.progress / rampDuration, 0, 1);
+          tiltAmount = sin((t * PI) / 2);
+        } else {
+          const rampStart = 0.5;
+          const rampEnd = 1.0;
+          let t = 1;
+          if (vial.progress < rampEnd) {
+            t = constrain(
+              (vial.progress - rampStart) / (rampEnd - rampStart),
+              0,
+              1,
+            );
+            t = sin((t * PI) / 2);
+          }
+          tiltAmount = t;
+        }
+
+        if (tiltAmount > 0.3) {
+          // Calculate bottle opening position (top of bottle, offset by tilt)
+          const openingOffsetX =
+            tiltDir * (vial.height / 2) * sin(baseTilt * tiltAmount);
+          const openingOffsetY =
+            -(vial.height / 2) * cos(baseTilt * tiltAmount);
+          const streamStartX = vial.x + openingOffsetX * vial.scale;
+          const streamStartY = vial.y + openingOffsetY * vial.scale;
+
+          // Stream ends at the bottom of the drop zone, aligned under the opening
+          const streamEndY = this.dropZone.y + this.dropZone.actualRy;
+          const halfW =
+            this.dropZone.actualRx || this.dropZone.rx || this.dropZone.r || 0;
+          const left = this.dropZone.x - halfW;
+          const right = this.dropZone.x + halfW;
+          let streamEndX = constrain(streamStartX, left + 4, right - 4);
+          const nudge = 8;
+          if (streamStartX < this.dropZone.x) {
+            streamEndX = min(streamEndX + nudge, right - 2);
+          } else {
+            streamEndX = max(streamEndX - nudge, left + 2);
+          }
+
+          const colourMap = {
+            // Per-vial id colours (from user)
+            black: color("#231F20"),
+            darkgreen: color("#215523"),
+            darkpurple: color("#511E68"),
+            lightblue: color("#8EB3D6"),
+            lightgreen: color("#41810B"),
+            lightpink: color("#D0518E"),
+            lightpurple: color("#7474B9"),
+            lightred: color("#BE272C"),
+            midblue: color("#5388C5"),
+            closedOrange: color("#FD9D07"),
+            teal: color("#1F8087"),
+            yellow: color("#EFD000"),
+          };
+
+          // Use id-based mapping only
+          const baseColour = colourMap[vial.id] || color(150, 150, 150);
+          // Ensure fully opaque stream colour (alpha = 255)
+          const streamColour = color(
+            red(baseColour),
+            green(baseColour),
+            blue(baseColour),
+            255,
+          );
+
+          // Refined flow: use a single phase and smaller lateral amplitude so
+          // the stream sag downward smoothly instead of bouncing side-to-side.
+          const waveSpeed = 0.08; // slower, smoother motion
+          const waveAmp = 5; // reduced lateral amplitude
+          const timeOffset = frameCount * waveSpeed;
+          const phase = sin(timeOffset); // common phase for both control points
+
+          // Rounded stroke caps for liquid appearance
+          strokeCap(ROUND);
+          strokeJoin(ROUND);
+
+          noFill();
+          stroke(streamColour);
+
+          // Compute control points with same phase so both move together
+          const cp1x = streamStartX + tiltDir * 12 + phase * waveAmp * 0.6;
+          const cp1y =
+            lerp(streamStartY, streamEndY, 0.32) + sin(timeOffset * 0.6) * 1.5;
+          const cp2x = streamEndX + phase * waveAmp * 0.3;
+          const cp2y =
+            lerp(streamStartY, streamEndY, 0.68) + cos(timeOffset * 0.65) * 1.2;
+
+          // Helper function to evaluate cubic bezier at parameter t
+          const bezierPoint = (t, p0, p1, p2, p3) => {
+            const mt = 1 - t;
+            const mt2 = mt * mt;
+            const mt3 = mt2 * mt;
+            const t2 = t * t;
+            const t3 = t2 * t;
+            return mt3 * p0 + 3 * mt2 * t * p1 + 3 * mt * t2 * p2 + t3 * p3;
+          };
+
+          // Draw base strand with tapering (thin at top, thick at bottom)
+          const segments = 20;
+          for (let i = 0; i < segments; i++) {
+            const t1 = i / segments;
+            const t2 = (i + 1) / segments;
+
+            const p1x = bezierPoint(t1, streamStartX, cp1x, cp2x, streamEndX);
+            const p1y = bezierPoint(t1, streamStartY, cp1y, cp2y, streamEndY);
+            const p2x = bezierPoint(t2, streamStartX, cp1x, cp2x, streamEndX);
+            const p2y = bezierPoint(t2, streamStartY, cp1y, cp2y, streamEndY);
+
+            // Taper weight: thin at top (1.5px), thick at bottom (7px)
+            const weight = lerp(1.5, 7, t1);
+            strokeWeight(weight);
+            line(p1x, p1y, p2x, p2y);
+          }
+
+          // Draw secondary strand (offset) with same tapering
+          const offsetA = tiltDir * 1.8 + phase * 1.0;
+          for (let i = 0; i < segments; i++) {
+            const t1 = i / segments;
+            const t2 = (i + 1) / segments;
+
+            const p1x = bezierPoint(
+              t1,
+              streamStartX - offsetA,
+              cp1x - offsetA * 0.6,
+              cp2x - offsetA * 0.4,
+              streamEndX - offsetA * 0.2,
+            );
+            const p1y = bezierPoint(t1, streamStartY, cp1y, cp2y, streamEndY);
+            const p2x = bezierPoint(
+              t2,
+              streamStartX - offsetA,
+              cp1x - offsetA * 0.6,
+              cp2x - offsetA * 0.4,
+              streamEndX - offsetA * 0.2,
+            );
+            const p2y = bezierPoint(t2, streamStartY, cp1y, cp2y, streamEndY);
+
+            const weight = lerp(1.0, 4.5, t1);
+            strokeWeight(weight);
+            line(p1x, p1y, p2x, p2y);
+          }
+
+          // Draw center highlight (thin at top, slightly thicker at bottom)
+          for (let i = 0; i < segments; i++) {
+            const t1 = i / segments;
+            const t2 = (i + 1) / segments;
+
+            const p1x = bezierPoint(
+              t1,
+              streamStartX - tiltDir * 0.9,
+              cp1x - tiltDir * 0.45,
+              cp2x - tiltDir * 0.3,
+              streamEndX,
+            );
+            const p1y = bezierPoint(t1, streamStartY, cp1y, cp2y, streamEndY);
+            const p2x = bezierPoint(
+              t2,
+              streamStartX - tiltDir * 0.9,
+              cp1x - tiltDir * 0.45,
+              cp2x - tiltDir * 0.3,
+              streamEndX,
+            );
+            const p2y = bezierPoint(t2, streamStartY, cp1y, cp2y, streamEndY);
+
+            const weight = lerp(0.5, 2.0, t1);
+            strokeWeight(weight);
+            line(p1x, p1y, p2x, p2y);
+          }
+
+          // Slight splash at the end
+          noStroke();
+          fill(streamColour);
+          const splashSize = 7 + sin(timeOffset * 1.2) * 1.5;
+          ellipse(streamEndX, streamEndY, splashSize, splashSize * 0.6);
+        }
+      }
+
+      // Now draw the vial on top of the stream
       push();
       translate(vial.x, vial.y);
       scale(vial.scale);
@@ -708,113 +990,6 @@ class Level {
       noStroke();
       image(vial.img, 0, 0, vial.width, vial.height);
       pop();
-
-      // ---- LIQUID STREAM during pour ----
-      // Draw a natural-looking liquid stream when bottle is tilted and pouring
-      const isPouringDropped = vial.droppedFromHeld && vial.progress > 0.15 && vial.progress < 1.4;
-      const isPouringOriginal = !vial.droppedFromHeld && vial.progress >= 0.6 && vial.progress < 1.45;
-      const isPouring = !vial.isCrystal && vial.isMoving && (isPouringDropped || isPouringOriginal);
-
-      if (isPouring && this.dropZone) {
-        push();
-        // Compute angle for tilt direction
-        const baseTilt = PI / 3.5;
-        const isRightSide = vial.x > this.dropZone.x;
-        const tiltDir = isRightSide ? -1 : 1;
-
-        // Compute current tilt amount for stream visibility
-        let tiltAmount = 0;
-        if (vial.droppedFromHeld) {
-          const rampDuration = 0.6;
-          const t = constrain(vial.progress / rampDuration, 0, 1);
-          tiltAmount = sin((t * PI) / 2);
-        } else {
-          const rampStart = 0.5;
-          const rampEnd = 1.0;
-          let t = 1;
-          if (vial.progress < rampEnd) {
-            t = constrain((vial.progress - rampStart) / (rampEnd - rampStart), 0, 1);
-            t = sin((t * PI) / 2);
-          }
-          tiltAmount = t;
-        }
-
-        // Only draw stream once tilt is significant
-        if (tiltAmount > 0.3) {
-          // Calculate bottle opening position (top of bottle, offset by tilt)
-          const openingOffsetX = tiltDir * (vial.height / 2) * sin(baseTilt * tiltAmount);
-          const openingOffsetY = -(vial.height / 2) * cos(baseTilt * tiltAmount);
-          const streamStartX = vial.x + openingOffsetX * vial.scale;
-          const streamStartY = vial.y + openingOffsetY * vial.scale;
-
-          // Stream ends at the bottom of the drop zone, aligned under the opening
-          const streamEndY = this.dropZone.y + this.dropZone.actualRy;
-          const halfW = this.dropZone.actualRx || this.dropZone.rx || this.dropZone.r || 0;
-          const left = this.dropZone.x - halfW;
-          const right = this.dropZone.x + halfW;
-          // target directly below the opening, clamped to the hitbox horizontal bounds
-          let streamEndX = constrain(streamStartX, left + 4, right - 4);
-          // Nudge slightly towards the center-of-hitbox depending on pour side
-          const nudge = 8;
-          if (streamStartX < this.dropZone.x) {
-            // pouring from left: nudge right
-            streamEndX = min(streamEndX + nudge, right - 2);
-          } else {
-            // pouring from right: nudge left
-            streamEndX = max(streamEndX - nudge, left + 2);
-          }
-
-          // Stream colour based on vial
-          const colourMap = {
-            green: color(72, 180, 72, 200),
-            red: color(200, 50, 50, 200),
-            blue: color(60, 120, 220, 200),
-            orange: color(230, 140, 40, 200),
-            pink: color(220, 100, 160, 200),
-          };
-          const streamColour = colourMap[vial.colour] || color(150, 150, 150, 200);
-
-          // Animated wave offset for natural flow
-          const waveSpeed = 0.15;
-          const waveAmp = 4;
-          const timeOffset = frameCount * waveSpeed;
-
-          // Draw multiple bezier curves for a thicker, more organic stream
-          noFill();
-          strokeWeight(5);
-          stroke(streamColour);
-
-          // Control points for bezier — creates a gentle arc
-          const cp1x = streamStartX + tiltDir * 15 + sin(timeOffset) * waveAmp;
-          const cp1y = lerp(streamStartY, streamEndY, 0.3);
-          const cp2x = streamEndX + sin(timeOffset + 1.5) * waveAmp * 0.5;
-          const cp2y = lerp(streamStartY, streamEndY, 0.7);
-
-          bezier(
-            streamStartX, streamStartY,
-            cp1x, cp1y,
-            cp2x, cp2y,
-            streamEndX, streamEndY
-          );
-
-          // Draw a thinner highlight for depth
-          strokeWeight(2);
-          stroke(red(streamColour) + 40, green(streamColour) + 40, blue(streamColour) + 40, 150);
-          bezier(
-            streamStartX - tiltDir * 1.5, streamStartY,
-            cp1x - tiltDir * 1, cp1y,
-            cp2x, cp2y,
-            streamEndX, streamEndY
-          );
-
-          // Small splash/drip effect at the end
-          noStroke();
-          fill(streamColour);
-          const splashSize = 6 + sin(timeOffset * 2) * 2;
-          ellipse(streamEndX, streamEndY, splashSize, splashSize * 0.6);
-        }
-        pop();
-      }
     });
 
     // Show result
@@ -1166,6 +1341,8 @@ function levelMousePressed() {
     heldVial.isSelected = false;
     heldVial.x = heldVial.startX;
     heldVial.y = heldVial.startY;
+    // restore closed appearance
+    heldVial.img = heldVial.closedImg;
     heldVial.scale = 1.0;
     heldVial.targetScale = 1.0;
     return;
@@ -1183,6 +1360,8 @@ function levelMousePressed() {
     ) {
       vial.isSelected = true;
       vial.isHeld = true;
+      // swap to open asset and slightly enlarge while held
+      vial.img = vial.openImg || vial.closedImg;
       vial.targetScale = 1.15;
     } else {
       vial.isSelected = false;

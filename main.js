@@ -57,17 +57,38 @@ function preload() {
 
   // Level 1 assets
   levelBg = loadImage("assets/background/blue-lvl.png");
-  orderSheet = loadImage("assets/order/blank-order-sheet.png");
+  orderSheet = loadImage("assets/order/blank-order-sheet-2.png");
   blankOrderSheet2 = loadImage("assets/order/blank-order-sheet-2.png");
   cauldronImg = loadImage("assets/cauldron/cauldron-default-state.png");
   recipeBookClosed = loadImage("assets/recipe/recipe-book-default-state.png");
   recipeBookOpen = loadImage("assets/recipe/open-recipe-book.svg");
 
-  bottleGreen = loadImage("assets/ingredient-bottles/lvl-1-easy-green.svg");
-  bottleRed = loadImage("assets/ingredient-bottles/lvl-1-easy-red.svg");
-  bottleBlue = loadImage("assets/ingredient-bottles/lvl-1-easy-blue.svg");
-  bottleOrange = loadImage("assets/ingredient-bottles/lvl-1-easy-orange.svg");
-  bottlePink = loadImage("assets/ingredient-bottles/lvl-1-easy-pink.svg");
+  bottleBlack = loadImage("assets/vials/closed-black.svg");
+  bottleDarkgreen = loadImage("assets/vials/closed-darkgreen.svg");
+  bottleDarkpurple = loadImage("assets/vials/closed-darkpurple.svg");
+  bottleLightblue = loadImage("assets/vials/closed-lightblue.svg");
+  bottleLightgreen = loadImage("assets/vials/closed-lightgreen.svg");
+  bottleLightpink = loadImage("assets/vials/closed-lightpink.svg");
+  bottleLightpurple = loadImage("assets/vials/closed-lightpurple.svg");
+  bottleLightred = loadImage("assets/vials/closed-lightred.svg");
+  bottleMidblue = loadImage("assets/vials/closed-midblue.svg");
+  bottleClosedOrange = loadImage("assets/vials/closed-orange.svg");
+  bottleTeal = loadImage("assets/vials/closed-teal.svg");
+  bottleYellow = loadImage("assets/vials/closed-yellow.svg");
+
+  // Open variants (used when a vial is picked up)
+  bottleOpenBlack = loadImage("assets/vials/open-black.svg");
+  bottleOpenDarkgreen = loadImage("assets/vials/open-darkgreen.svg");
+  bottleOpenDarkpurple = loadImage("assets/vials/open-darkpurple.svg");
+  bottleOpenLightblue = loadImage("assets/vials/open-lightblue.svg");
+  bottleOpenLightgreen = loadImage("assets/vials/open-lightgreen.svg");
+  bottleOpenLightpink = loadImage("assets/vials/open-lightpink.svg");
+  bottleOpenLightpurple = loadImage("assets/vials/open-lightpurple.svg");
+  bottleOpenLightred = loadImage("assets/vials/open-lightred.svg");
+  bottleOpenMidblue = loadImage("assets/vials/open-midblue.svg");
+  bottleOpenOrange = loadImage("assets/vials/open-orange.svg");
+  bottleOpenTeal = loadImage("assets/vials/open-teal.svg");
+  bottleOpenYellow = loadImage("assets/vials/open-yellow.svg");
 
   crystalImg = loadImage("assets/crystal/crystal-v2.svg");
   bowlImg = loadImage("assets/crystal/bowl.png");
@@ -107,11 +128,31 @@ function setup() {
     levelBg,
     orderSheet,
     blankOrderSheet2,
-    bottleGreen,
-    bottleRed,
-    bottleBlue,
-    bottleOrange,
-    bottlePink,
+    bottleBlack,
+    bottleDarkgreen,
+    bottleDarkpurple,
+    bottleLightblue,
+    bottleLightgreen,
+    bottleLightpink,
+    bottleLightpurple,
+    bottleLightred,
+    bottleMidblue,
+    bottleClosedOrange,
+    bottleTeal,
+    bottleYellow,
+    // Open variants
+    bottleOpenBlack,
+    bottleOpenDarkgreen,
+    bottleOpenDarkpurple,
+    bottleOpenLightblue,
+    bottleOpenLightgreen,
+    bottleOpenLightpink,
+    bottleOpenLightpurple,
+    bottleOpenLightred,
+    bottleOpenMidblue,
+    bottleOpenOrange,
+    bottleOpenTeal,
+    bottleOpenYellow,
     crystalImg,
     bowlImg,
     envelopeImg,
