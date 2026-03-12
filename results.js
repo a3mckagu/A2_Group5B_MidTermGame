@@ -43,7 +43,8 @@ const Results = {
     // ── Dim ──
     push();
     noStroke();
-    fill(0, map(progress, 0, 1, 0, 210));
+    // slightly increased dimming from 140 -> 170 for better focus
+    fill(0, map(progress, 0, 1, 0, 160));
     rectMode(CORNER);
     rect(0, 0, BASE_WIDTH, BASE_HEIGHT);
     pop();
@@ -54,8 +55,8 @@ const Results = {
     let headingText, statusText, quoteText, attrText, btnLabel;
 
     if (type === "CORRECT") {
-      faceHi = color(30, 107, 30);
-      faceLo = color(13, 61, 13);
+      faceHi = color(0, 59, 1); // #003B01
+      faceLo = color(0, 59, 1); // #003B01 (uniform full face color)
       rodCol = color(42, 24, 8);
       trimCol = color(200, 160, 48);
       innerBorder = color(10, 42, 10);
@@ -66,17 +67,17 @@ const Results = {
       btnBorderCol = color(112, 192, 80);
       btnTextCol = color(160, 240, 128);
       headingText = "Well Brewed!";
-      statusText = "\u2736  Order Fulfilled  \u2736";
+      statusText = "ORDER FULFILLED";
       quoteText =
         "Remarkable! I can already feel the odds\nshifting in my favour. You have a gift.";
       attrText = "\u2014 Lord Alistair, unusually pleased";
-      btnLabel = "PLAY AGAIN \u203A";
+      btnLabel = "PLAY AGAIN";
     } else if (type === "WRONG") {
-      faceHi = color(192, 40, 40);
-      faceLo = color(122, 16, 16);
+      faceHi = color(68, 0, 0); // #440000
+      faceLo = color(68, 0, 0); // #440000 (uniform full face color)
       rodCol = color(42, 24, 8);
       trimCol = color(200, 160, 48);
-      innerBorder = color(90, 14, 14);
+      innerBorder = color(49, 0, 0); // #310000
       headingCol = color(255, 224, 224);
       statusCol = color(240, 144, 144);
       bodyCol = color(248, 232, 232);
@@ -84,15 +85,15 @@ const Results = {
       btnBorderCol = color(224, 112, 112);
       btnTextCol = color(255, 224, 224);
       headingText = "Wrong Potion!";
-      statusText = "\u2717  Order Failed  \u2717";
+      statusText = "ORDER FAILED";
       quoteText =
         "This smells nothing like Beginner's Luck!\nI asked for fortune, not a biohazard.";
       attrText = "\u2014 Lord Alistair, deeply unimpressed";
-      btnLabel = "TRY AGAIN \u203A";
+      btnLabel = "TRY AGAIN";
     } else {
       // TIMEOUT
-      faceHi = color(26, 30, 80);
-      faceLo = color(12, 16, 48);
+      faceHi = color(34, 7, 80); // #220750
+      faceLo = color(34, 7, 80); // #220750 (uniform full face color)
       rodCol = color(42, 24, 8);
       trimCol = color(200, 160, 48);
       innerBorder = color(10, 12, 40);
@@ -103,11 +104,11 @@ const Results = {
       btnBorderCol = color(200, 184, 32);
       btnTextCol = color(232, 216, 64);
       headingText = "Too Slow!";
-      statusText = "\u25c8  Order Abandoned  \u25c8";
+      statusText = "ORDER ABANDONED";
       quoteText =
         "I am a lord, not a patient man.\nMy luck won't wait forever and neither shall I.";
       attrText = "\u2014 Lord Alistair, already halfway out the door";
-      btnLabel = "TRY AGAIN \u203A";
+      btnLabel = "TRY AGAIN";
     }
 
     // ── Banner dimensions ──
@@ -125,8 +126,9 @@ const Results = {
     // Unfurl: clip from top, revealing downward
     const revealH = totalH * progress;
 
-    // Banner draws at top of screen
-    const bannerTopY = 0;
+    // Banner draws slightly higher than the top of the screen
+    const BANNER_SHIFT = -18; // move banner up by 18px
+    const bannerTopY = BANNER_SHIFT;
 
     push();
     // Clip to revealed region only
@@ -140,9 +142,9 @@ const Results = {
       bx,
       BW,
       BH,
-      ROD_Y,
+      ROD_Y: ROD_Y + BANNER_SHIFT,
       ROD_H,
-      BODY_TOP,
+      BODY_TOP: BODY_TOP + BANNER_SHIFT,
       POINT_H,
       faceHi,
       faceLo,
@@ -158,7 +160,7 @@ const Results = {
       Results._drawText({
         cx,
         BW,
-        BODY_TOP,
+        BODY_TOP: BODY_TOP + BANNER_SHIFT,
         BH,
         headingText,
         statusText,
@@ -171,6 +173,8 @@ const Results = {
         attrCol,
         btnBorderCol,
         btnTextCol,
+        trimCol,
+        innerBorder,
         textFade,
       });
     }
@@ -220,7 +224,7 @@ const Results = {
     push();
     noStroke();
     const faceTopY = BODY_TOP + GOLD_INSET;
-    const faceBottomY = BODY_TOP + BH;
+    const faceBottomY = BODY_TOP + BH - GOLD_INSET;
     const facePointY = BODY_TOP + BH + POINT_H - GOLD_INSET; // inset point
     const faceMidY = faceTopY + (faceBottomY - faceTopY) / 2;
     const faceL = bx + GOLD_INSET;
@@ -239,17 +243,22 @@ const Results = {
     // No top-half overlay: fabric face is a single inset shape matching gold trim
     pop();
 
-    // ── Inner border line ──
+    // ── Inner border line (inset shape matching gold outer border) ──
     push();
     stroke(innerBorder);
     strokeWeight(2);
     noFill();
+    const ibLeft = bx + INNER_INSET;
+    const ibRight = bx + BW - INNER_INSET;
+    const ibTopY = BODY_TOP + INNER_INSET;
+    const ibBottomY = BODY_TOP + BH - INNER_INSET;
+    const ibPointY = BODY_TOP + BH + POINT_H - INNER_INSET;
     beginShape();
-    vertex(bx + INNER_INSET, BODY_TOP + GOLD_INSET);
-    vertex(bx + BW - INNER_INSET, BODY_TOP + GOLD_INSET);
-    vertex(bx + BW - INNER_INSET, BODY_TOP + BH - 4);
-    vertex(cx, BODY_TOP + BH + POINT_H - INNER_INSET - 4);
-    vertex(bx + INNER_INSET, BODY_TOP + BH - 4);
+    vertex(ibLeft, ibTopY); // top-left
+    vertex(ibRight, ibTopY); // top-right
+    vertex(ibRight, ibBottomY); // bottom-right
+    vertex(cx, ibPointY); // bottom point
+    vertex(ibLeft, ibBottomY); // bottom-left
     endShape(CLOSE);
     pop();
 
@@ -287,16 +296,18 @@ const Results = {
     push();
     noStroke();
     const loopPositions = [0.18, 0.32, 0.5, 0.68, 0.82];
+    // center loop rects around the banner center (use CENTER mode)
+    rectMode(CENTER);
     loopPositions.forEach((t) => {
-      const lx = bx + BW * t - 9;
-      // loop body
+      const lx = bx + BW * t; // center x for each loop
+      // loop body (centered vertically at ROD_Y)
       fill(red(trimCol) * 0.75, green(trimCol) * 0.75, blue(trimCol) * 0.75);
-      rectMode(CORNER);
-      rect(lx, ROD_Y - ROD_H / 2 - 2, 18, 22, 4);
-      // loop shadow at bottom
+      rect(lx, ROD_Y, 18, 22, 4);
+      // loop shadow below (centered)
       fill(red(trimCol) * 0.5, green(trimCol) * 0.5, blue(trimCol) * 0.5);
-      rect(lx, ROD_Y + 4, 18, 8, 2);
+      rect(lx, ROD_Y + 8, 18, 8, 2);
     });
+    // restore default rectMode via pop()
     pop();
   },
 
@@ -317,52 +328,63 @@ const Results = {
     attrCol,
     btnBorderCol,
     btnTextCol,
+    trimCol,
+    innerBorder,
     textFade,
   }) {
     const alpha = textFade * 255;
-    const textAreaTop = BODY_TOP + 20;
+    const textAreaTop = BODY_TOP + 36;
     const textAreaBottom = BODY_TOP + BH - 16;
     const textAreaH = textAreaBottom - textAreaTop;
 
     push();
     textAlign(CENTER, TOP);
 
-    // ── Heading ──
+    // ── Heading ── (use gold trim color)
     textFont(FONT_MANUFACTURING_CONSENT);
     textSize(46);
-    fill(red(headingCol), green(headingCol), blue(headingCol), alpha);
+    fill(red(trimCol), green(trimCol), blue(trimCol), alpha);
     noStroke();
     let y = textAreaTop + textAreaH * 0.03;
     text(headingText, cx, y);
 
-    // ── Status ──
-    y += 58;
+    // ── Status ── (use gold trim color)
+    // nudged slightly lower so it sits directly below the heading
+    y += 46;
     textFont(FONT_VT323);
     textSize(18);
-    fill(red(statusCol), green(statusCol), blue(statusCol), alpha * 0.9);
+    fill(red(trimCol), green(trimCol), blue(trimCol), alpha * 0.9);
     text(statusText, cx, y);
 
-    // ── Ornament divider ──
-    y += 24;
-    stroke(red(attrCol), green(attrCol), blue(attrCol), alpha * 0.45);
+    // ── Ornament divider ── (use inner border color)
+    // moved slightly lower
+    y += 32;
+    stroke(
+      red(innerBorder),
+      green(innerBorder),
+      blue(innerBorder),
+      alpha * 0.45,
+    );
     strokeWeight(1);
     line(cx - BW * 0.3, y, cx + BW * 0.3, y);
     noStroke();
 
-    // ── Quote ──
-    y += 12;
+    // ── Quote ── (use #F5F5F5)
+    // moved slightly lower
+    y += 30;
     textFont(FONT_IM_FELL_ENGLISH);
     textStyle(ITALIC);
     textSize(17);
-    fill(red(bodyCol), green(bodyCol), blue(bodyCol), alpha);
+    fill(245, 245, 245, alpha);
     text(quoteText, cx, y);
     textStyle(NORMAL);
 
-    // ── Attribution ──
-    y += 66;
+    // ── Attribution ── (use #F5F5F5)
+    // move a bit higher and use slightly larger text
+    y += 50;
     textSize(14);
     textAlign(CENTER, TOP);
-    fill(red(attrCol), green(attrCol), blue(attrCol), alpha * 0.85);
+    fill(245, 245, 245, alpha * 0.85);
     text(attrText, cx, y);
 
     // ── Button ──
@@ -373,19 +395,37 @@ const Results = {
 
     Results._playAgainBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
 
-    stroke(
-      red(btnBorderCol),
-      green(btnBorderCol),
-      blue(btnBorderCol),
-      alpha * 0.7,
-    );
+    // Detect hover in BASE coordinates so the button lightens on hover
+    let isBtnHovered = false;
+    if (typeof getScaleAndOffset === "function") {
+      const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
+      const adjustedMX = (mouseX - offsetX) / scaleFactor;
+      const adjustedMY = (mouseY - offsetY) / scaleFactor;
+      isBtnHovered =
+        adjustedMX >= btnX &&
+        adjustedMX <= btnX + btnW &&
+        adjustedMY >= btnY &&
+        adjustedMY <= btnY + btnH;
+    }
+
+    stroke(red(trimCol), green(trimCol), blue(trimCol), alpha * 0.7);
     strokeWeight(1);
-    noFill();
+    // Lighten the button fill when hovered
+    const lightenAmount = isBtnHovered ? 20 : 0;
+    const br = min(255, red(trimCol) + lightenAmount);
+    const bg = min(255, green(trimCol) + lightenAmount);
+    const bb = min(255, blue(trimCol) + lightenAmount);
+    fill(br, bg, bb, alpha * 0.95);
     rectMode(CORNER);
     rect(btnX, btnY, btnW, btnH, 4);
 
     noStroke();
-    fill(red(btnTextCol), green(btnTextCol), blue(btnTextCol), alpha);
+    // Slightly adjust button text color on hover for contrast
+    const textDarken = isBtnHovered ? -10 : 0;
+    const tr = constrain(red(innerBorder) + textDarken, 0, 255);
+    const tg = constrain(green(innerBorder) + textDarken, 0, 255);
+    const tb = constrain(blue(innerBorder) + textDarken, 0, 255);
+    fill(tr, tg, tb, alpha);
     textFont(FONT_VT323);
     textSize(24);
     textAlign(CENTER, CENTER);
@@ -405,33 +445,53 @@ const Results = {
 
     // Play Again / Try Again
     if (mx >= pa.x && mx <= pa.x + pa.w && my >= pa.y && my <= pa.y + pa.h) {
-      // Reset the level instance
+      // Reset the results animation state
       Results._unfurlStart = null;
       Results._lastResult = null;
-      levelInstance.levelResult = null;
-      levelInstance.patienceStart = null;
-      levelInstance.patiencePaused = false;
-      levelInstance.patienceElapsedAtPause = 0;
-      levelInstance.patienceDisplayFrac = 1;
-      levelInstance.orderStarted = false;
-      levelInstance.cauldronSequence = [];
-      levelInstance.crystalAdded = false;
-      levelInstance.vials.forEach((v) => {
-        v.used = false;
-        v.isHeld = false;
-        v.isMoving = false;
-        v.isSelected = false;
-        v.progress = 0;
-        v.scale = 1.0;
-        v.targetScale = 1.0;
-        v.img = v.closedImg;
-        v.x = v.startX;
-        v.y = v.startY;
-        if (v.isCrystal) {
-          v.x = layout.crystal.x;
-          v.y = layout.crystal.y;
-        }
+
+      // Recreate a fresh level instance and switch to the level screen
+      // This ensures the game truly restarts from the level screen.
+      currentScreen = "level";
+      levelInstance = new Level({
+        cauldronImg,
+        recipeBookClosed,
+        recipeBookOpen,
+        levelBg,
+        orderSheet,
+        blankOrderSheet2,
+        bottleBlack,
+        bottleDarkgreen,
+        bottleDarkpurple,
+        bottleLightblue,
+        bottleLightgreen,
+        bottleLightpink,
+        bottleLightpurple,
+        bottleLightred,
+        bottleMidblue,
+        bottleClosedOrange,
+        bottleTeal,
+        bottleYellow,
+        // Open variants
+        bottleOpenBlack,
+        bottleOpenDarkgreen,
+        bottleOpenDarkpurple,
+        bottleOpenLightblue,
+        bottleOpenLightgreen,
+        bottleOpenLightpink,
+        bottleOpenLightpurple,
+        bottleOpenLightred,
+        bottleOpenMidblue,
+        bottleOpenOrange,
+        bottleOpenTeal,
+        bottleOpenYellow,
+        crystalImg,
+        bowlImg,
+        envelopeImg,
+        greenSymbol,
+        blueSymbol,
+        orangeSymbol,
       });
+
       return;
     }
 

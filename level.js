@@ -302,37 +302,52 @@ class Level {
         (bottleImg, index) => this.addedIngredients[index] === bottleImg,
       );
 
+    // Only set a result when the crystal has been added; the final result
+    // (CORRECT / WRONG) should occur after the player completes the sequence
+    // and drops the crystal into the cauldron.
+    if (!this.crystalAdded) return;
+
     this.levelResult = isCorrect ? "CORRECT" : "WRONG";
   }
 
-  draw() {
+  draw(paused = false) {
     // Background
     imageMode(CORNER);
     image(this.assets.levelBg, 0, 0, BASE_WIDTH, BASE_HEIGHT);
     imageMode(CENTER);
 
-    // Initialize patience timer when level first draws
-    if (this.patienceStart === null || this.patienceStart === undefined) {
-      this.patienceStart = millis();
+    // Initialize patience timer and update display only when not paused
+    let displayFrac = this.patienceDisplayFrac;
+    if (!paused) {
+      if (this.patienceStart === null || this.patienceStart === undefined) {
+        this.patienceStart = millis();
+      }
+      let patienceElapsed;
+      if (this.patiencePaused) {
+        patienceElapsed = this.patienceElapsedAtPause || 0;
+      } else {
+        patienceElapsed = millis() - (this.patienceStart || 0);
+      }
+      const patienceFrac = constrain(
+        1 - patienceElapsed / (this.patienceDuration || 120000),
+        0,
+        1,
+      );
+      // Smooth the displayed fraction for a less choppy animation
+      this.patienceDisplayFrac = lerp(
+        this.patienceDisplayFrac || 1,
+        patienceFrac,
+        0.08,
+      );
+      displayFrac = this.patienceDisplayFrac;
+      // If patience has fully depleted (instantaneous fraction) and the crystal wasn't added,
+      // trigger a TIMEOUT result (only once). Use the raw patienceFrac rather than
+      // the smoothed displayFrac so the timeout reliably fires.
+      if (patienceFrac <= 0 && !this.crystalAdded && !this.levelResult) {
+        this.levelResult = "TIMEOUT";
+        if (typeof Results !== "undefined") Results.reset();
+      }
     }
-    let patienceElapsed;
-    if (this.patiencePaused) {
-      patienceElapsed = this.patienceElapsedAtPause || 0;
-    } else {
-      patienceElapsed = millis() - (this.patienceStart || 0);
-    }
-    const patienceFrac = constrain(
-      1 - patienceElapsed / (this.patienceDuration || 120000),
-      0,
-      1,
-    );
-    // Smooth the displayed fraction for a less choppy animation
-    this.patienceDisplayFrac = lerp(
-      this.patienceDisplayFrac || 1,
-      patienceFrac,
-      0.08,
-    );
-    const displayFrac = this.patienceDisplayFrac;
 
     // ---- ORDER SHEET (shown after START ORDER is clicked) ----
     if (this.orderStarted) {
@@ -437,13 +452,15 @@ class Level {
     // Keep crystal positioned relative to the bowl when not moving
     const crystalYOffset = layout.bowl.y - layout.crystal.y; // original offset
     const crystalVial = this.vials.find((v) => v.isCrystal);
-    if (crystalVial && !crystalVial.isMoving && !crystalVial.isHeld) {
-      crystalVial.x = b.x;
-      // Place crystal slightly above the bowl center based on original offset
-      // Nudge slightly upward for finer alignment
-      crystalVial.y = desiredBowlY - crystalYOffset + 10;
-      crystalVial.startX = crystalVial.x;
-      crystalVial.startY = crystalVial.y;
+    if (!paused) {
+      if (crystalVial && !crystalVial.isMoving && !crystalVial.isHeld) {
+        crystalVial.x = b.x;
+        // Place crystal slightly above the bowl center based on original offset
+        // Nudge slightly upward for finer alignment
+        crystalVial.y = desiredBowlY - crystalYOffset + 10;
+        crystalVial.startX = crystalVial.x;
+        crystalVial.startY = crystalVial.y;
+      }
     }
 
     // ---- CRYSTAL ----
@@ -656,246 +673,250 @@ class Level {
     const anyVialHeld = this.vials.some((v) => v.isHeld);
     const anyVialActive = this.vials.some((v) => v.isMoving);
     this.vials.forEach((vial) => {
-      // Update held bottle position to follow mouse in real-time (smooth)
-      if (vial.isHeld && !vial.isMoving) {
-        const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
-        const mx = (mouseX - offsetX) / scaleFactor;
-        const my = (mouseY - offsetY) / scaleFactor;
+      // When paused, skip state-updates (movement, input handling)
+      if (!paused) {
+        // Update held bottle position to follow mouse in real-time (smooth)
+        if (vial.isHeld && !vial.isMoving) {
+          const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
+          const mx = (mouseX - offsetX) / scaleFactor;
+          const my = (mouseY - offsetY) / scaleFactor;
 
-        // Smoothly follow the cursor to avoid snapping (still centers on cursor over time)
-        const followSpeed = 0.94; // larger -> snappier, smaller -> more float
-        vial.x = lerp(vial.x, mx, followSpeed);
-        vial.y = lerp(vial.y, my, followSpeed);
+          // Smoothly follow the cursor to avoid snapping (still centers on cursor over time)
+          const followSpeed = 0.94; // larger -> snappier, smaller -> more float
+          vial.x = lerp(vial.x, mx, followSpeed);
+          vial.y = lerp(vial.y, my, followSpeed);
 
-        // Continuous collision detection: sample 10 points along the mouse path
-        // between last frame and this frame to catch fast movement that skips the hitbox.
+          // Continuous collision detection: sample 10 points along the mouse path
+          // between last frame and this frame to catch fast movement that skips the hitbox.
+          const {
+            scaleFactor: sf2,
+            offsetX: ox2,
+            offsetY: oy2,
+          } = getScaleAndOffset();
+          const prevMx = (pmouseX - ox2) / sf2;
+          const prevMy = (pmouseY - oy2) / sf2;
+
+          // Default to the semi-oval/vial hitbox
+          let eCx = this.dropZone.x;
+          let eCy = this.dropZone.y; // center of semi-oval by default
+          let rx =
+            this.dropZone.actualRx ||
+            this.dropZone.radiusX ||
+            this.dropZone.r ||
+            0;
+          let ry =
+            this.dropZone.actualRy ||
+            this.dropZone.radiusY ||
+            this.dropZone.r ||
+            0;
+          // If the held vial is the crystal, use the crystal-specific oval
+          if (vial.isCrystal && this.dropZone.crystalRx !== undefined) {
+            eCx = this.dropZone.crystalCx;
+            eCy = this.dropZone.crystalCy;
+            rx = this.dropZone.crystalRx;
+            ry = this.dropZone.crystalRy;
+          }
+
+          // Helper: is a single point inside the active drop zone?
+          const pointInZone = (px, py) => {
+            const pdx = (px - eCx) / rx;
+            const pdy = (py - eCy) / ry;
+            const inEllipse = rx > 0 && ry > 0 && pdx * pdx + pdy * pdy <= 1;
+            if (vial.isCrystal) {
+              const extendUp = this.dropZone.crystalExtendUp || 0;
+              const inArc = inEllipse && py >= eCy;
+              const inRect =
+                Math.abs(px - eCx) <= rx && py >= eCy - extendUp && py <= eCy;
+              return inArc || inRect;
+            }
+            return inEllipse && py <= eCy;
+          };
+
+          let insideRect = false;
+          if (vial.isCrystal) {
+            // Require the bottom three points of the crystal bounding box to be
+            // inside the zone — bottom-left, bottom-center, bottom-right.
+            // The top of the crystal can stick out above the rim naturally.
+            const hw = (vial.width * vial.scale) / 2;
+            const hh = (vial.height * vial.scale) / 2;
+            insideRect =
+              pointInZone(vial.x - hw, vial.y + hh) && // bottom-left
+              pointInZone(vial.x, vial.y + hh) && // bottom-center
+              pointInZone(vial.x + hw, vial.y + hh); // bottom-right
+          } else {
+            // Vials: sample points along the mouse path
+            const STEPS = 10;
+            for (let i = 0; i <= STEPS; i++) {
+              const t = i / STEPS;
+              if (pointInZone(lerp(prevMx, mx, t), lerp(prevMy, my, t))) {
+                insideRect = true;
+                break;
+              }
+            }
+          }
+
+          if (insideRect) {
+            // Use the vial's lerped visual position so the pour always starts
+            // from where the vial actually appears on screen, not the mouse.
+            vial.droppedFromHeld = true;
+            vial.pourX = vial.x;
+            vial.pourY = vial.y;
+            vial.isMoving = true;
+            vial.isHeld = false;
+            vial.targetScale = vial.isCrystal ? 1.18 : 1.08;
+            vial.progress = 0;
+            // Lock the stream end point so it never jumps during the animation
+            vial.lockedStreamEndX = null; // will be set on first draw frame
+            if (vial.isCrystal) {
+              this.patiencePaused = true;
+              this.patienceElapsedAtPause =
+                millis() - (this.patienceStart || 0);
+            }
+          }
+        }
+
+        // Smooth scale transition for pick-up/drop effect
+        vial.scale = lerp(vial.scale, vial.targetScale, 0.18);
+
+        // Hover detection and smooth lift: lift a bit when the mouse is over
+        // the vial and it's not being held or moved.
         const {
-          scaleFactor: sf2,
-          offsetX: ox2,
-          offsetY: oy2,
+          scaleFactor: _sf,
+          offsetX: _ox,
+          offsetY: _oy,
         } = getScaleAndOffset();
-        const prevMx = (pmouseX - ox2) / sf2;
-        const prevMy = (pmouseY - oy2) / sf2;
+        const adjustedMX_v = (mouseX - _ox) / _sf;
+        const adjustedMY_v = (mouseY - _oy) / _sf;
+        const halfW_v = vial.width * 0.5 * vial.scale;
+        const halfH_v = vial.height * 0.5 * vial.scale;
+        const isHoverV =
+          !vial.isHeld &&
+          !vial.isMoving &&
+          !anyVialHeld && // suppress other vial hover while one is held
+          !anyVialActive && // suppress hover while any vial is active (pouring)
+          adjustedMX_v > vial.x - halfW_v &&
+          adjustedMX_v < vial.x + halfW_v &&
+          adjustedMY_v > vial.y - halfH_v &&
+          adjustedMY_v < vial.y + halfH_v;
+        // Subtle lift on hover: smaller offset and gentler interpolation
+        const targetLift = isHoverV ? -3 : 0; // negative Y moves up (reduced from -4)
+        vial.lift = vial.lift === undefined ? 0 : vial.lift;
+        vial.lift = lerp(vial.lift, targetLift, 0.22);
 
-        // Default to the semi-oval/vial hitbox
-        let eCx = this.dropZone.x;
-        let eCy = this.dropZone.y; // center of semi-oval by default
-        let rx =
-          this.dropZone.actualRx ||
-          this.dropZone.radiusX ||
-          this.dropZone.r ||
-          0;
-        let ry =
-          this.dropZone.actualRy ||
-          this.dropZone.radiusY ||
-          this.dropZone.r ||
-          0;
-        // If the held vial is the crystal, use the crystal-specific oval
-        if (vial.isCrystal && this.dropZone.crystalRx !== undefined) {
-          eCx = this.dropZone.crystalCx;
-          eCy = this.dropZone.crystalCy;
-          rx = this.dropZone.crystalRx;
-          ry = this.dropZone.crystalRy;
-        }
+        if (vial.isMoving) {
+          const speed = vial.isCrystal
+            ? vial.progress < 0.6
+              ? 0.012
+              : 0.008
+            : 0.02;
+          vial.progress += speed;
 
-        // Helper: is a single point inside the active drop zone?
-        const pointInZone = (px, py) => {
-          const pdx = (px - eCx) / rx;
-          const pdy = (py - eCy) / ry;
-          const inEllipse = rx > 0 && ry > 0 && pdx * pdx + pdy * pdy <= 1;
           if (vial.isCrystal) {
-            const extendUp = this.dropZone.crystalExtendUp || 0;
-            const inArc = inEllipse && py >= eCy;
-            const inRect =
-              Math.abs(px - eCx) <= rx && py >= eCy - extendUp && py <= eCy;
-            return inArc || inRect;
-          }
-          return inEllipse && py <= eCy;
-        };
+            const targetX = layout.cauldron.x;
+            const cauldronHeight =
+              (this.assets.cauldronImg.height / this.assets.cauldronImg.width) *
+              layout.cauldron.w;
+            const pauseY = layout.cauldron.y - cauldronHeight / 2 - 90;
+            const finalY = layout.cauldron.y + cauldronHeight / 4;
 
-        let insideRect = false;
-        if (vial.isCrystal) {
-          // Require the bottom three points of the crystal bounding box to be
-          // inside the zone — bottom-left, bottom-center, bottom-right.
-          // The top of the crystal can stick out above the rim naturally.
-          const hw = (vial.width * vial.scale) / 2;
-          const hh = (vial.height * vial.scale) / 2;
-          insideRect =
-            pointInZone(vial.x - hw, vial.y + hh) && // bottom-left
-            pointInZone(vial.x, vial.y + hh) && // bottom-center
-            pointInZone(vial.x + hw, vial.y + hh); // bottom-right
-        } else {
-          // Vials: sample points along the mouse path
-          const STEPS = 10;
-          for (let i = 0; i <= STEPS; i++) {
-            const t = i / STEPS;
-            if (pointInZone(lerp(prevMx, mx, t), lerp(prevMy, my, t))) {
-              insideRect = true;
-              break;
-            }
-          }
-        }
+            if (vial.droppedFromHeld) {
+              // If crystal was dropped from the user's hand, fall straight down
+              // from the visual pour X position; only interpolate Y towards finalY.
+              if (vial.progress < 1) {
+                const t = constrain(vial.progress, 0, 1);
+                vial.x = vial.pourX; // keep X fixed at drop point
+                vial.y = lerp(vial.pourY, finalY, t);
+              } else {
+                vial.isMoving = false;
+                vial.isSelected = false;
+                vial.progress = 0;
+                vial.x = vial.pourX;
+                vial.y = finalY;
+                vial.used = true;
+                this.crystalAdded = true;
 
-        if (insideRect) {
-          // Use the vial's lerped visual position so the pour always starts
-          // from where the vial actually appears on screen, not the mouse.
-          vial.droppedFromHeld = true;
-          vial.pourX = vial.x;
-          vial.pourY = vial.y;
-          vial.isMoving = true;
-          vial.isHeld = false;
-          vial.targetScale = vial.isCrystal ? 1.18 : 1.08;
-          vial.progress = 0;
-          // Lock the stream end point so it never jumps during the animation
-          vial.lockedStreamEndX = null; // will be set on first draw frame
-          if (vial.isCrystal) {
-            this.patiencePaused = true;
-            this.patienceElapsedAtPause = millis() - (this.patienceStart || 0);
-          }
-        }
-      }
-
-      // Smooth scale transition for pick-up/drop effect
-      vial.scale = lerp(vial.scale, vial.targetScale, 0.18);
-
-      // Hover detection and smooth lift: lift a bit when the mouse is over
-      // the vial and it's not being held or moved.
-      const {
-        scaleFactor: _sf,
-        offsetX: _ox,
-        offsetY: _oy,
-      } = getScaleAndOffset();
-      const adjustedMX_v = (mouseX - _ox) / _sf;
-      const adjustedMY_v = (mouseY - _oy) / _sf;
-      const halfW_v = vial.width * 0.5 * vial.scale;
-      const halfH_v = vial.height * 0.5 * vial.scale;
-      const isHoverV =
-        !vial.isHeld &&
-        !vial.isMoving &&
-        !anyVialHeld && // suppress other vial hover while one is held
-        !anyVialActive && // suppress hover while any vial is active (pouring)
-        adjustedMX_v > vial.x - halfW_v &&
-        adjustedMX_v < vial.x + halfW_v &&
-        adjustedMY_v > vial.y - halfH_v &&
-        adjustedMY_v < vial.y + halfH_v;
-      // Subtle lift on hover: smaller offset and gentler interpolation
-      const targetLift = isHoverV ? -3 : 0; // negative Y moves up (reduced from -4)
-      vial.lift = vial.lift === undefined ? 0 : vial.lift;
-      vial.lift = lerp(vial.lift, targetLift, 0.22);
-
-      if (vial.isMoving) {
-        const speed = vial.isCrystal
-          ? vial.progress < 0.6
-            ? 0.012
-            : 0.008
-          : 0.02;
-        vial.progress += speed;
-
-        if (vial.isCrystal) {
-          const targetX = layout.cauldron.x;
-          const cauldronHeight =
-            (this.assets.cauldronImg.height / this.assets.cauldronImg.width) *
-            layout.cauldron.w;
-          const pauseY = layout.cauldron.y - cauldronHeight / 2 - 90;
-          const finalY = layout.cauldron.y + cauldronHeight / 4;
-
-          if (vial.droppedFromHeld) {
-            // If crystal was dropped from the user's hand, fall straight down
-            // from the visual pour X position; only interpolate Y towards finalY.
-            if (vial.progress < 1) {
-              const t = constrain(vial.progress, 0, 1);
-              vial.x = vial.pourX; // keep X fixed at drop point
-              vial.y = lerp(vial.pourY, finalY, t);
+                this.checkSequence();
+              }
             } else {
-              vial.isMoving = false;
-              vial.isSelected = false;
-              vial.progress = 0;
-              vial.x = vial.pourX;
-              vial.y = finalY;
-              vial.used = true;
-              this.crystalAdded = true;
+              // Original flow when crystal is triggered by non-held action
+              if (vial.progress < 0.6) {
+                const t = vial.progress / 0.6;
+                vial.x = lerp(vial.startX, targetX, t);
+                vial.y = lerp(vial.startY, pauseY, t);
+              } else if (vial.progress < 1) {
+                const t = (vial.progress - 0.6) / 0.4;
+                vial.x = targetX;
+                vial.y = lerp(pauseY, finalY, t);
+              } else {
+                vial.isMoving = false;
+                vial.isSelected = false;
+                vial.progress = 0;
+                vial.x = targetX;
+                vial.y = finalY;
+                vial.used = true;
+                this.crystalAdded = true;
 
-              this.checkSequence();
+                this.checkSequence();
+              }
             }
           } else {
-            // Original flow when crystal is triggered by non-held action
-            if (vial.progress < 0.6) {
-              const t = vial.progress / 0.6;
-              vial.x = lerp(vial.startX, targetX, t);
-              vial.y = lerp(vial.startY, pauseY, t);
-            } else if (vial.progress < 1) {
-              const t = (vial.progress - 0.6) / 0.4;
-              vial.x = targetX;
-              vial.y = lerp(pauseY, finalY, t);
-            } else {
-              vial.isMoving = false;
-              vial.isSelected = false;
-              vial.progress = 0;
-              vial.x = targetX;
-              vial.y = finalY;
-              vial.used = true;
-              this.crystalAdded = true;
-
-              this.checkSequence();
-            }
-          }
-        } else {
-          // Regular bottle animation
-          if (vial.droppedFromHeld) {
-            // New flow: pour in place, then return to shelf
-            if (vial.progress < 1.5) {
-              // Pouring phase (tilting happens during this)
-              vial.x = vial.pourX;
-              vial.y = vial.pourY;
-              if (!this.addedIngredients.includes(vial.closedImg)) {
-                this.addedIngredients.push(vial.closedImg);
-                console.log("Added ingredient:", vial.closedImg);
+            // Regular bottle animation
+            if (vial.droppedFromHeld) {
+              // New flow: pour in place, then return to shelf
+              if (vial.progress < 1.5) {
+                // Pouring phase (tilting happens during this)
+                vial.x = vial.pourX;
+                vial.y = vial.pourY;
+                if (!this.addedIngredients.includes(vial.closedImg)) {
+                  this.addedIngredients.push(vial.closedImg);
+                  console.log("Added ingredient:", vial.closedImg);
+                }
+              } else if (vial.progress < 2.5) {
+                // Return to shelf
+                const back = vial.progress - 1.5;
+                vial.x = lerp(vial.pourX, vial.startX, back);
+                vial.y = lerp(vial.pourY, vial.startY, back);
+              } else {
+                // Animation complete
+                vial.isMoving = false;
+                vial.isSelected = false;
+                vial.progress = 0;
+                vial.x = vial.startX;
+                vial.y = vial.startY;
+                // restore normal scale and clear dropped flag
+                vial.targetScale = 1.0;
+                vial.img = vial.closedImg;
+                vial.droppedFromHeld = false;
+                vial.lockedStreamEndX = null;
               }
-            } else if (vial.progress < 2.5) {
-              // Return to shelf
-              const back = vial.progress - 1.5;
-              vial.x = lerp(vial.pourX, vial.startX, back);
-              vial.y = lerp(vial.pourY, vial.startY, back);
             } else {
-              // Animation complete
-              vial.isMoving = false;
-              vial.isSelected = false;
-              vial.progress = 0;
-              vial.x = vial.startX;
-              vial.y = vial.startY;
-              // restore normal scale and clear dropped flag
-              vial.targetScale = 1.0;
-              vial.img = vial.closedImg;
-              vial.droppedFromHeld = false;
-              vial.lockedStreamEndX = null;
-            }
-          } else {
-            // Original flow: move to cauldron, pour, return to shelf
-            const targetX = layout.cauldron.x - 20;
-            const targetY = layout.cauldron.y - 160;
+              // Original flow: move to cauldron, pour, return to shelf
+              const targetX = layout.cauldron.x - 20;
+              const targetY = layout.cauldron.y - 160;
 
-            if (vial.progress < 1) {
-              vial.x = lerp(vial.startX, targetX, vial.progress);
-              vial.y = lerp(vial.startY, targetY, vial.progress);
-            } else if (vial.progress < 1.5) {
-              vial.x = targetX;
-              vial.y = targetY;
-              if (!this.addedIngredients.includes(vial.closedImg)) {
-                this.addedIngredients.push(vial.closedImg);
-                console.log("Added ingredient:", vial.closedImg);
+              if (vial.progress < 1) {
+                vial.x = lerp(vial.startX, targetX, vial.progress);
+                vial.y = lerp(vial.startY, targetY, vial.progress);
+              } else if (vial.progress < 1.5) {
+                vial.x = targetX;
+                vial.y = targetY;
+                if (!this.addedIngredients.includes(vial.closedImg)) {
+                  this.addedIngredients.push(vial.closedImg);
+                  console.log("Added ingredient:", vial.closedImg);
+                }
+              } else if (vial.progress < 2.5) {
+                const back = vial.progress - 1.5;
+                vial.x = lerp(targetX, vial.startX, back);
+                vial.y = lerp(targetY, vial.startY, back);
+              } else {
+                vial.isMoving = false;
+                vial.isSelected = false;
+                vial.progress = 0;
+                vial.x = vial.startX;
+                vial.y = vial.startY;
+                // restore closed appearance after returning to shelf
+                vial.img = vial.closedImg;
               }
-            } else if (vial.progress < 2.5) {
-              const back = vial.progress - 1.5;
-              vial.x = lerp(targetX, vial.startX, back);
-              vial.y = lerp(targetY, vial.startY, back);
-            } else {
-              vial.isMoving = false;
-              vial.isSelected = false;
-              vial.progress = 0;
-              vial.x = vial.startX;
-              vial.y = vial.startY;
-              // restore closed appearance after returning to shelf
-              vial.img = vial.closedImg;
             }
           }
         }
@@ -1030,7 +1051,7 @@ class Level {
           // the stream sag downward smoothly instead of bouncing side-to-side.
           const waveSpeed = 0.08; // slower, smoother motion
           const waveAmp = 5; // reduced lateral amplitude
-          const timeOffset = frameCount * waveSpeed;
+          const timeOffset = paused ? 0 : frameCount * waveSpeed;
           const phase = sin(timeOffset); // common phase for both control points
 
           // Rounded stroke caps for liquid appearance
@@ -1228,9 +1249,7 @@ class Level {
     // (Held vial is drawn later so it can appear above UI elements)
 
     // ---- RESULT SCREEN ----
-    if (this.levelResult) {
-      Results.draw(this.levelResult);
-    }
+    // Results overlay is drawn by the outer drawLevel wrapper.
 
     // ---- ENVELOPE ICON ----
     const env = layout.envelope;
@@ -1249,9 +1268,11 @@ class Level {
       adjustedMY > env.y - envHeight / 2 &&
       adjustedMY < env.y + envHeight / 2;
 
-    // Smooth scale transition
+    // Smooth scale transition (only when not paused)
     const targetScale = isEnvHovered ? 1.1 : 1;
-    this.envelopeScale = lerp(this.envelopeScale, targetScale, 0.25);
+    if (!paused) {
+      this.envelopeScale = lerp(this.envelopeScale, targetScale, 0.25);
+    }
 
     push();
     translate(env.x, env.y);
@@ -1267,7 +1288,7 @@ class Level {
 
       // Pulsing ring effect behind the badge (only when panel is closed)
       if (!this.isOrderOpen) {
-        const pulse = (sin(frameCount * 0.05) + 1) / 2; // 0 to 1
+        const pulse = paused ? 0 : (sin(frameCount * 0.05) + 1) / 2; // 0 to 1
         const ringRadius = 14 + pulse * 10; // 14 to 24
         const ringAlpha = 150 * (1 - pulse); // 150 to 0
         fill(208, 0, 0, ringAlpha);
@@ -1584,7 +1605,8 @@ function drawLevel() {
   push();
   translate(offsetX, offsetY);
   scale(scaleFactor);
-  levelInstance.draw();
+  const paused = !!levelInstance.levelResult;
+  levelInstance.draw(paused);
   // If the level has a result, draw the results overlay (in BASE coords)
   if (levelInstance.levelResult && typeof Results !== "undefined") {
     Results.draw(levelInstance.levelResult);
@@ -1787,19 +1809,45 @@ function levelKeyPressed() {
   }
 
   // Debug keys: 1 = success, 2 = wrong, 3 = timeout
+  // Only allow CORRECT/WRONG debug triggers when the crystal has been added
+  // and (for CORRECT) the ingredient sequence matches.
   if (key === "1") {
-    levelInstance.levelResult = "CORRECT";
-    if (typeof Results !== "undefined") Results.reset();
+    if (levelInstance.crystalAdded) {
+      // verify sequence is correct before forcing CORRECT
+      const isCorrect =
+        levelInstance.addedIngredients.length ===
+          levelInstance.correctOrder.length &&
+        levelInstance.correctOrder.every(
+          (b, i) => levelInstance.addedIngredients[i] === b,
+        );
+      if (isCorrect) {
+        levelInstance.levelResult = "CORRECT";
+        if (typeof Results !== "undefined") Results.reset();
+      }
+    }
     return;
   }
   if (key === "2") {
-    levelInstance.levelResult = "WRONG";
-    if (typeof Results !== "undefined") Results.reset();
+    if (levelInstance.crystalAdded) {
+      // only force WRONG if sequence isn't correct
+      const isCorrect =
+        levelInstance.addedIngredients.length ===
+          levelInstance.correctOrder.length &&
+        levelInstance.correctOrder.every(
+          (b, i) => levelInstance.addedIngredients[i] === b,
+        );
+      if (!isCorrect) {
+        levelInstance.levelResult = "WRONG";
+        if (typeof Results !== "undefined") Results.reset();
+      }
+    }
     return;
   }
   if (key === "3") {
-    levelInstance.levelResult = "TIMEOUT";
-    if (typeof Results !== "undefined") Results.reset();
+    if (!levelInstance.crystalAdded) {
+      levelInstance.levelResult = "TIMEOUT";
+      if (typeof Results !== "undefined") Results.reset();
+    }
     return;
   }
 }
