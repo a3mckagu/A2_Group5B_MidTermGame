@@ -17,6 +17,38 @@
   </head>
   <body>
     <script src="https://cdn.jsdelivr.net/npm/p5@1/lib/p5.min.js"></script>
+    <!-- Background music (loops). We attempt autoplay and fall back to first user interaction if blocked. -->
+    <audio id="bg-music" src="assets/sound/medieval-music.mp3" loop></audio>
+    <script>
+      (function () {
+        const bg = document.getElementById("bg-music");
+        if (!bg) return;
+        bg.volume = 0.25;
+
+        function tryPlay() {
+          bg.play().catch(() => {});
+          document.removeEventListener("click", tryPlay);
+          document.removeEventListener("keydown", tryPlay);
+        }
+
+        // Try immediately (may be blocked by browser autoplay policies)
+        tryPlay();
+
+        // If blocked, start on first user interaction
+        document.addEventListener("click", tryPlay, { once: true });
+        document.addEventListener("keydown", tryPlay, { once: true });
+
+        // Ensure looping across browsers: restart when the track ends
+        bg.addEventListener("ended", function () {
+          try {
+            bg.currentTime = 0;
+            bg.play().catch(() => {});
+          } catch (e) {
+            // ignore
+          }
+        });
+      })();
+    </script>
     <!-- your existing files (order matters) -->
     <script src="start.js"></script>
     <script src="instructions.js"></script>
