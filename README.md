@@ -1,7 +1,4 @@
-## Project Title
-
-Assignment 2 - Mid-term Game: Potionary, A Crafting Puzzle Game
-
+## Assignment 2 - Mid-term Game: Potionary, A Crafting Puzzle Game
 ---
 
 ## Group Number
