@@ -8,6 +8,10 @@
 const BASE_W = 1152;
 const BASE_H = 648;
 
+// Toggle to show hitbox debug overlay on the map screen.
+// Toggled by the global debug key `H` (see main.js)
+let MAP_DEBUG_HITBOX = false;
+
 // Hover animation state for map icons fade
 let mapIconHoverFade = 0;
 const MAP_ICON_FADE_SPEED = 0.08; // fade speed per frame
@@ -164,6 +168,46 @@ function drawMap() {
   textStyle(BOLD);
   textAlign(CENTER, CENTER);
   text("Alchemy Map", BASE_W / 2, BASE_H * 0.14);
+
+  // Debug: draw hitbox overlay when enabled
+  if (MAP_DEBUG_HITBOX) {
+    // Level 1 (circle)
+    const l1x = mapIconX + mapIconWidth * level1RelX;
+    const l1y = mapIconY + mapIconHeight * level1RelY;
+    const l1diam = mapIconWidth * level1RelDiameter;
+
+    noFill();
+    stroke(0, 255, 100);
+    strokeWeight(2);
+    ellipse(l1x, l1y, l1diam, l1diam);
+
+    // Level 2 (circle-like representation using relative coords)
+    const l2x = mapIconX + mapIconWidth * level2RelX;
+    const l2y = mapIconY + mapIconHeight * level2RelY;
+    const l2diam = mapIconWidth * level2RelDiameter;
+    stroke(255, 180, 0);
+    ellipse(l2x, l2y, l2diam, l2diam);
+
+    // Level 3 (circle-like representation using relative coords)
+    const l3x = mapIconX + mapIconWidth * level3RelX;
+    const l3y = mapIconY + mapIconHeight * level3RelY;
+    const l3diam = mapIconWidth * level3RelDiameter;
+    stroke(200, 80, 255);
+    ellipse(l3x, l3y, l3diam, l3diam);
+
+    // Draw readout for level1 values
+    noStroke();
+    fill(255);
+    textAlign(LEFT, TOP);
+    textSize(13);
+    const infoX = 16;
+    const infoY = BASE_H - 110;
+    text(
+      `Hitbox debug (H toggle)\nJ / L: left / right\nI / K: up / down\nN / M: smaller / larger\nP: save   0: load\n\nLevel1 x=${level1RelX.toFixed(4)} y=${level1RelY.toFixed(4)} d=${level1RelDiameter.toFixed(4)}`,
+      infoX,
+      infoY,
+    );
+  }
 
   pop();
 

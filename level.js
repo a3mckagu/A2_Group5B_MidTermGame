@@ -12,6 +12,15 @@ function getScaleAndOffset() {
   const offsetY = (height - BASE_HEIGHT * scaleFactor) / 2;
   return { scaleFactor, offsetX, offsetY };
 }
+// Toggle to show spoon hitbox debug overlay.
+let SPOON_DEBUG_HITBOX = false;
+// Vertical offset (pixels) applied to the spoon hitbox. Negative moves the
+// hit area up, positive moves it down. Adjust while debugging.
+let SPOON_HITBOX_Y_OFFSET = -10;
+// Vertical scale multiplier for the spoon hitbox: <1 makes the ellipse thinner.
+let SPOON_HITBOX_HEIGHT_SCALE = 0.85;
+// Horizontal scale multiplier for the spoon hitbox: <1 makes the ellipse narrower.
+let SPOON_HITBOX_WIDTH_SCALE = 0.9;
 // Layout (easy to tweak later)
 const layout = {
   cauldron: { x: BASE_WIDTH / 2, y: 465, w: 300 },
@@ -364,9 +373,9 @@ class Level {
         const t = i / width;
         let c;
         if (t < 0.5) {
-          c = lerpColor(g.color("#D00000"), g.color("#FFD700"), t * 2);
+          c = lerpColor(g.color("#1E40AF"), g.color("#5B21B6"), t * 2);
         } else {
-          c = lerpColor(g.color("#FFD700"), g.color("#228B22"), (t - 0.5) * 2);
+          c = lerpColor(g.color("#5B21B6"), g.color("#4C1D95"), (t - 0.5) * 2);
         }
         g.fill(c);
         g.rect(i, 0, 1, height);
@@ -438,6 +447,10 @@ class Level {
     this.previousSpoonOffsetAmount = 0; // to track direction changes for stir counting
     this.mixMeterComplete = false; // when 5 stirs reached, meter fills completely
     this.mixMeterDisplayFraction = 0; // animated fill fraction (0 to 1) for visual effect
+    // Time-based mixing (ms accumulated while spoon is moving). If you prefer
+    // count-based mixing this can be ignored — default required time is 3000ms.
+    this.mixAccumMs = 0; // accumulated mixing time in milliseconds
+    this.MIX_REQUIRED_MS = 2000; // ms required to complete mix (configurable)
     this.mixSuccessShowFrame = null; // frameCount when success message should appear and then disappear
     // Stirring sound tracking
     this.stirringSound = null; // reference to HTML audio element
@@ -626,6 +639,167 @@ class Level {
       }
     }
 
+    // Render the mix meter whenever the spoon is held (order state doesn't matter)
+    if (this.spoonIsHeld && !this.mixMeterComplete) {
+      const o = layout.orderSheet;
+      const sheetWidth = 290;
+      const sheetHeight =
+        (this.assets.blankOrderSheet2.height /
+          this.assets.blankOrderSheet2.width) *
+        sheetWidth;
+      const sheetLeft = o.x - sheetWidth / 2;
+      const sheetTop = o.y - sheetHeight / 2;
+      const padding = 30;
+      const barWidth = sheetWidth - padding * 2;
+      const barHeight = 15;
+      const barX = sheetLeft + padding;
+      const barY = sheetTop + padding + 105;
+
+      // Update animated fill fraction (driven by accumulated mix time)
+      const mixTargetFraction = Math.max(
+        0,
+        Math.min(1, this.mixAccumMs / this.MIX_REQUIRED_MS),
+      );
+      this.mixMeterDisplayFraction = lerp(
+        this.mixMeterDisplayFraction,
+        mixTargetFraction,
+        0.25,
+      );
+      const mixMeterGap = 12 + 42 + 25;
+      const mixMeterX = barX;
+      const mixMeterY = barY + barHeight + mixMeterGap;
+      const mixMeterWidth = barWidth;
+      const mixMeterHeight = 15;
+
+      // Label
+      push();
+      textAlign(LEFT, BOTTOM);
+      textFont("VT323");
+      textSize(15);
+      fill("#2D2D2D");
+      text("MIX METER", mixMeterX, mixMeterY - 4);
+      pop();
+
+      // Background bar
+      push();
+      rectMode(CORNER);
+      fill("#CCCCCC");
+      noStroke();
+      rect(mixMeterX, mixMeterY, mixMeterWidth, mixMeterHeight);
+      pop();
+
+      // Gradient fill
+      push();
+      imageMode(CORNER);
+      rectMode(CORNER);
+      const mixGradient = this._getMixGradient(mixMeterWidth, mixMeterHeight);
+      image(mixGradient, mixMeterX, mixMeterY);
+      const filledMixW = Math.max(
+        0,
+        mixMeterWidth * this.mixMeterDisplayFraction,
+      );
+      fill("#CCCCCC");
+      noStroke();
+      rect(
+        mixMeterX + filledMixW,
+        mixMeterY,
+        mixMeterWidth - filledMixW,
+        mixMeterHeight,
+      );
+      pop();
+
+      // Evenly spaced dividers (3 dividers -> 4 segments)
+      push();
+      stroke("#6E6E6E");
+      strokeWeight(1);
+      for (let i = 1; i < 4; i++) {
+        const lineX = mixMeterX + (mixMeterWidth / 4) * i;
+        line(lineX, mixMeterY + 1, lineX, mixMeterY + mixMeterHeight - 1);
+      }
+      pop();
+    }
+
+    // Show success message and full meter when mix completes (persistent)
+    if (this.mixMeterComplete) {
+      const o = layout.orderSheet;
+      const sheetWidth = 290;
+      const sheetHeight =
+        (this.assets.blankOrderSheet2.height /
+          this.assets.blankOrderSheet2.width) *
+        sheetWidth;
+      const sheetLeft = o.x - sheetWidth / 2;
+      const sheetTop = o.y - sheetHeight / 2;
+      const padding = 30;
+      const barWidth = sheetWidth - padding * 2;
+      const barHeight = 15;
+      const barX = sheetLeft + padding;
+      const barY = sheetTop + padding + 105;
+
+      const mixMeterGap = 12 + 42 + 25;
+      const mixMeterX = barX;
+      const mixMeterY = barY + barHeight + mixMeterGap;
+      const mixMeterWidth = barWidth;
+      const mixMeterHeight = 15;
+
+      // Label (keep same title as when meter is active)
+      push();
+      textAlign(LEFT, BOTTOM);
+      textFont("VT323");
+      textSize(15);
+      fill("#2D2D2D");
+      text("MIX METER", mixMeterX, mixMeterY - 4);
+      pop();
+
+      // Draw full meter and success text (persistent)
+      push();
+      rectMode(CORNER);
+      fill("#CCCCCC");
+      noStroke();
+      rect(mixMeterX, mixMeterY, mixMeterWidth, mixMeterHeight);
+      pop();
+
+      push();
+      imageMode(CORNER);
+      rectMode(CORNER);
+      const mixGradient = this._getMixGradient(mixMeterWidth, mixMeterHeight);
+      image(mixGradient, mixMeterX, mixMeterY);
+      pop();
+
+      push();
+      stroke("#6E6E6E");
+      strokeWeight(1);
+      for (let i = 1; i < 4; i++) {
+        const lineX = mixMeterX + (mixMeterWidth / 4) * i;
+        line(lineX, mixMeterY + 1, lineX, mixMeterY + mixMeterHeight - 1);
+      }
+      pop();
+
+      // Show the brief success text for a short window after completion
+      if (this.mixSuccessShowFrame === null)
+        this.mixSuccessShowFrame = frameCount;
+      const framesSinceSuccess = frameCount - this.mixSuccessShowFrame;
+      const SUCCESS_DISPLAY_FRAMES = 70;
+      const FADE_FRAMES = 10; // final frames used to fade out the text
+      if (framesSinceSuccess < SUCCESS_DISPLAY_FRAMES) {
+        // Compute alpha: full opacity initially, then linearly fade over FADE_FRAMES
+        let alpha = 255;
+        if (framesSinceSuccess >= SUCCESS_DISPLAY_FRAMES - FADE_FRAMES) {
+          const t =
+            (framesSinceSuccess - (SUCCESS_DISPLAY_FRAMES - FADE_FRAMES)) /
+            FADE_FRAMES;
+          alpha = lerp(255, 0, constrain(t, 0, 1));
+        }
+        push();
+        textAlign(LEFT, TOP);
+        textFont("VT323");
+        textStyle(NORMAL);
+        textSize(15);
+        fill(255, alpha);
+        text("Successful Mixture!", mixMeterX, mixMeterY + mixMeterHeight + 8);
+        pop();
+      }
+    }
+
     // ---- ORDER SHEET (shown after START ORDER is clicked) ----
     // Only show the blank order sheet if orderStarted and no sequences have been completed yet
     if (this.orderStarted && this.sequenceResultsToDisplay.length === 0) {
@@ -710,140 +884,6 @@ class Level {
         line(lineX, barY + 1, lineX, barY + barHeight - 1);
       }
       pop();
-
-      // ---- MIX METER ----
-      // Show mix meter below Customer Patience card (only when spoon is held and not yet complete)
-      if (this.spoonIsHeld && !this.mixMeterComplete) {
-        // Update animated fill fraction towards target (moves incrementally as user stirs)
-        const mixTargetFraction = Math.max(0, Math.min(1, this.mixCount / 5));
-        this.mixMeterDisplayFraction = lerp(
-          this.mixMeterDisplayFraction,
-          mixTargetFraction,
-          0.19,
-        ); // faster animation to follow user speed
-
-        const mixMeterGap = 12 + 42 + 25; // gap between patience bar and mix meter, plus 42 + 25 pixels lower
-        const mixMeterX = barX;
-        const mixMeterY = barY + barHeight + mixMeterGap;
-        const mixMeterWidth = barWidth;
-        const mixMeterHeight = 15;
-
-        // "MIX METER" label (darker gray for legibility)
-        push();
-        textAlign(LEFT, BOTTOM);
-        textFont("VT323");
-        textSize(15);
-        fill("#2D2D2D");
-        text("MIX METER", mixMeterX, mixMeterY - 4);
-        pop();
-
-        // Mix meter background
-        push();
-        rectMode(CORNER);
-        fill("#CCCCCC");
-        noStroke();
-        rect(mixMeterX, mixMeterY, mixMeterWidth, mixMeterHeight);
-        pop();
-
-        // Gradient fill (red → yellow → green) rendered from cached graphic
-        push();
-        imageMode(CORNER);
-        rectMode(CORNER);
-        const mixGradient = this._getMixGradient(mixMeterWidth, mixMeterHeight);
-        image(mixGradient, mixMeterX, mixMeterY);
-        // Overlay unfilled area with background color based on animated display fraction
-        const filledMixW = Math.max(
-          0,
-          mixMeterWidth * this.mixMeterDisplayFraction,
-        );
-        fill("#CCCCCC");
-        noStroke();
-        rect(
-          mixMeterX + filledMixW,
-          mixMeterY,
-          mixMeterWidth - filledMixW,
-          mixMeterHeight,
-        );
-        pop();
-
-        // Segment lines (5 sections for 5 stirs)
-        push();
-        stroke("#6E6E6E");
-        strokeWeight(1);
-        for (let i = 1; i < 5; i++) {
-          const lineX = mixMeterX + (mixMeterWidth / 5) * i;
-          line(lineX, mixMeterY + 1, lineX, mixMeterY + mixMeterHeight - 1);
-        }
-        pop();
-      }
-
-      // Show "Successful Mixture" when meter completes, then hide everything after ~1 second
-      if (this.mixMeterComplete) {
-        if (this.mixSuccessShowFrame === null) {
-          // Just completed - record the frame
-          this.mixSuccessShowFrame = frameCount;
-        }
-
-        const framesSinceSuccess = frameCount - this.mixSuccessShowFrame;
-
-        // Show meter and success message for ~60 frames, then hide
-        if (framesSinceSuccess < 60) {
-          const mixMeterGap = 12 + 42 + 25;
-          const mixMeterX = barX;
-          const mixMeterY = barY + barHeight + mixMeterGap;
-          const mixMeterWidth = barWidth;
-          const mixMeterHeight = 15;
-
-          // Show meter filled completely
-          push();
-          rectMode(CORNER);
-          fill("#CCCCCC");
-          noStroke();
-          rect(mixMeterX, mixMeterY, mixMeterWidth, mixMeterHeight);
-          pop();
-
-          // Gradient fill at 100%
-          push();
-          imageMode(CORNER);
-          rectMode(CORNER);
-          const mixGradient = this._getMixGradient(
-            mixMeterWidth,
-            mixMeterHeight,
-          );
-          image(mixGradient, mixMeterX, mixMeterY);
-          pop();
-
-          // Segment lines
-          push();
-          stroke("#6E6E6E");
-          strokeWeight(1);
-          for (let i = 1; i < 5; i++) {
-            const lineX = mixMeterX + (mixMeterWidth / 5) * i;
-            line(lineX, mixMeterY + 1, lineX, mixMeterY + mixMeterHeight - 1);
-          }
-          pop();
-
-          // Display success message
-          push();
-          textAlign(LEFT, TOP);
-          textFont("VT323");
-          textStyle(NORMAL);
-          textSize(15);
-          fill(255); // white text
-          text(
-            "Successful Mixture!",
-            mixMeterX,
-            mixMeterY + mixMeterHeight + 8,
-          );
-          pop();
-        } else {
-          // Hide everything after success display time expires
-          this.mixMeterComplete = false;
-          this.mixSuccessShowFrame = null;
-          this.mixMeterDisplayFraction = 0;
-          this.mixCount = 0;
-        }
-      }
     }
 
     // ---- BOWL (single brown bowl) ----
@@ -1008,6 +1048,10 @@ class Level {
     // so we can suppress hover effects and defer drawing the held vial on top.
     const anyVialHeld = this.vials.some((v) => v.isHeld);
     const anyVialActive = this.vials.some((v) => v.isMoving);
+    // Consider spoon 'active' when picked up and moved away from its base
+    const spoonActive =
+      this.spoonIsHeld &&
+      Math.abs((this.spoonDisplayX || 0) - (this.spoonBaseX || 0)) > 1;
 
     // Draw closed book with smooth hover lift (visual only; click area unchanged)
     let desiredLift = 0;
@@ -1017,7 +1061,8 @@ class Level {
       !this.isOrderOpen &&
       !anyVialHeld &&
       !anyVialActive &&
-      !this.crystalAdded
+      !this.crystalAdded &&
+      !spoonActive
     ) {
       const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
       const adjustedMX = (mouseX - offsetX) / scaleFactor;
@@ -1079,18 +1124,57 @@ class Level {
       const adjustedMX_spoon = (mouseX - _oxSpoon) / _sfSpoon;
       const adjustedMY_spoon = (mouseY - _oySpoon) / _sfSpoon;
 
-      // Check if mouse is over spoon area
+      // Check if mouse is over spoon area (rotated, scaled ellipse match)
       const anyVialHeld = this.vials.some((v) => v.isHeld);
       const anyVialActive = this.vials.some((v) => v.isMoving);
+      // Compute detection center: use displayed X when held, otherwise base X
+      const spoonDetectX =
+        this.spoonIsHeld && this.spoonDisplayX ? this.spoonDisplayX : spoonX;
+      const spoonDetectY =
+        spoonY +
+        (this.spoonLift || 0) +
+        (typeof SPOON_HITBOX_Y_OFFSET !== "undefined"
+          ? SPOON_HITBOX_Y_OFFSET
+          : 0);
+
+      // Rotated-ellipse test (inverse-transform math, same as click test)
+      let insideEllipse = false;
+      try {
+        const dx = adjustedMX_spoon - spoonDetectX;
+        const dy = adjustedMY_spoon - spoonDetectY;
+        const r = this.spoonRotation || 0;
+        const s = this.spoonScale || 1;
+        const cosR = Math.cos(r);
+        const sinR = Math.sin(r);
+        const lx = (dx * cosR + dy * sinR) / s;
+        const ly = (-dx * sinR + dy * cosR) / s;
+        const aUnscaled =
+          (spoonWidth / 2) *
+          (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+            ? SPOON_HITBOX_WIDTH_SCALE
+            : 1);
+        const bUnscaled =
+          (spoonHeight / 2) *
+          (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+            ? SPOON_HITBOX_HEIGHT_SCALE
+            : 1);
+        insideEllipse =
+          aUnscaled > 0 &&
+          bUnscaled > 0 &&
+          (lx * lx) / (aUnscaled * aUnscaled) +
+            (ly * ly) / (bUnscaled * bUnscaled) <=
+            1;
+      } catch (e) {
+        insideEllipse = false;
+      }
+
       const isSpoonHover =
         !this.isOrderOpen &&
         !anyVialHeld &&
         !anyVialActive &&
         !this.spoonIsHeld &&
-        adjustedMX_spoon > spoonX - spoonWidth / 2 &&
-        adjustedMX_spoon < spoonX + spoonWidth / 2 &&
-        adjustedMY_spoon > spoonY - spoonHeight / 2 &&
-        adjustedMY_spoon < spoonY + spoonHeight / 2;
+        insideEllipse &&
+        !this.mixMeterComplete; // don't lift spoon when mix is complete
 
       // Subtle lift on hover: same as vial behavior
       const targetSpoonLift = isSpoonHover ? -3 : 0;
@@ -1147,70 +1231,68 @@ class Level {
         );
         this.targetSpoonDisplayX = BASE_WIDTH / 2 + spoonOffsetAmount;
 
-        // Detect active stirring motion (player moving spoon left/right with sufficient movement)
-        const STIRRING_MOTION_THRESHOLD = this.stirringMotionThreshold; // minimum movement for active stir
+        // Detect movement magnitude this frame (based on spoon offset change)
+        const movementDelta = Math.abs(
+          spoonOffsetAmount - (this.previousSpoonOffsetAmount || 0),
+        );
+
+        // Consider any movement >= 1px as mixing time (per user request)
+        const MIX_MOVEMENT_MIN = 1; // pixels required to count time for mixing
+        const dt = typeof deltaTime !== "undefined" ? deltaTime : 16.67; // ms since last frame
+        if (movementDelta >= MIX_MOVEMENT_MIN) {
+          // Accumulate mixing time
+          this.mixAccumMs = (this.mixAccumMs || 0) + dt;
+          // Cap the accumulator
+          if (this.mixAccumMs >= this.MIX_REQUIRED_MS) {
+            this.mixAccumMs = this.MIX_REQUIRED_MS;
+            if (!this.mixMeterComplete) {
+              this.mixMeterComplete = true;
+              if (this.mixSuccessShowFrame === null)
+                this.mixSuccessShowFrame = frameCount;
+            }
+          }
+        }
+
+        // Active stirring (for sound/UX): only play while the spoon is moving.
+        // Require a non-trivial movement delta to start the sound; pause
+        // immediately when movement stops so sound only plays during motion.
+        const STIRRING_MOTION_THRESHOLD = this.stirringMotionThreshold;
         const absOffsetAmount = Math.abs(spoonOffsetAmount);
-        if (
-          absOffsetAmount > STIRRING_MOTION_THRESHOLD &&
-          (Math.abs(spoonOffsetAmount - this.previousSpoonOffsetAmount) > 5 ||
-            frameCount - this.lastStirMovementFrame > 5)
-        ) {
-          // Player is actively stirring (moving with significant motion)
+
+        // Consider 'moving' when the spoon displacement changes by at least 1px
+        const MOVEMENT_REQUIRED = 1;
+        const STIR_DEBOUNCE_FRAMES = 12; // keep sound for a short window after motion
+        if (movementDelta >= MOVEMENT_REQUIRED) {
           this.isActivelyStirring = true;
           this.lastStirMovementFrame = frameCount;
-          this.holdNoMovementStartFrame = null; // reset no-movement timer when actively stirring
-
-          // Start or continue playing stirring sound
-          if (!this.stirringSound) {
+          this.holdNoMovementStartFrame = null;
+          if (!this.stirringSound)
             this.stirringSound = document.getElementById("stirring-sound");
-          }
-          if (this.stirringSound) {
-            // If sound is not already playing, play it
-            if (
-              this.stirringSound.paused ||
-              this.stirringSound.currentTime === 0
-            ) {
-              this.stirringSound.volume = 1.0; // full volume
-              this.stirringSound.loop = true;
-              this.stirringSound.play().catch(() => {});
-            }
+          if (
+            this.stirringSound &&
+            (this.stirringSound.paused || this.stirringSound.currentTime === 0)
+          ) {
+            this.stirringSound.volume = 1.0;
+            this.stirringSound.loop = true;
+            this.stirringSound.play().catch(() => {});
           }
         } else {
-          // Not moving enough to be "actively stirring"
           this.isActivelyStirring = false;
-
-          // Track when player started holding without moving
-          if (this.holdNoMovementStartFrame === null) {
-            this.holdNoMovementStartFrame = frameCount;
-          }
-
-          // Stop sound if player has been holding without moving for more than 2 seconds (120 frames at 60fps)
+          // Only stop the sound if we haven't detected movement for several frames
           if (
-            frameCount - this.holdNoMovementStartFrame > 120 &&
-            this.stirringSound &&
-            !this.stirringSound.paused
+            this.lastStirMovementFrame &&
+            frameCount - this.lastStirMovementFrame > STIR_DEBOUNCE_FRAMES
           ) {
-            this.stirringSound.pause();
-            this.stirringSound.currentTime = 0;
-          }
-        }
-
-        // Track stirs: count when spoon crosses from one side to the other with sufficient magnitude
-        if (!this.mixMeterComplete) {
-          const STIR_THRESHOLD = 30; // pixels of movement to count as a directional commitment
-          const prevWasLeft = this.previousSpoonOffsetAmount < -STIR_THRESHOLD;
-          const prevWasRight = this.previousSpoonOffsetAmount > STIR_THRESHOLD;
-          const currIsLeft = spoonOffsetAmount < -STIR_THRESHOLD;
-          const currIsRight = spoonOffsetAmount > STIR_THRESHOLD;
-
-          // Count a stir when crossing from left to right or right to left
-          if ((prevWasLeft && currIsRight) || (prevWasRight && currIsLeft)) {
-            this.mixCount++;
-            if (this.mixCount >= 5) {
-              this.mixMeterComplete = true;
+            if (this.stirringSound && !this.stirringSound.paused) {
+              this.stirringSound.pause();
+              this.stirringSound.currentTime = 0;
             }
           }
+          if (this.holdNoMovementStartFrame === null)
+            this.holdNoMovementStartFrame = frameCount;
         }
+
+        // Always store previous amount for next frame comparison
         this.previousSpoonOffsetAmount = spoonOffsetAmount;
       } else {
         // When not held: original state
@@ -1227,11 +1309,12 @@ class Level {
           this.stirringSound.pause();
           this.stirringSound.currentTime = 0;
         }
-        // Reset mix meter if not yet complete (must do 5 stirs in one consecutive hold)
+        // Reset mix meter if not yet complete (must do required mixing time in one hold)
         if (!this.mixMeterComplete) {
           this.mixCount = 0;
           this.previousSpoonOffsetAmount = 0;
           this.mixMeterDisplayFraction = 0;
+          this.mixAccumMs = 0;
         }
       }
 
@@ -1285,6 +1368,120 @@ class Level {
       // Restore clipping
       drawingContext.restore();
       pop();
+
+      // Debug: draw spoon hitbox area (in BASE coordinates)
+      if (SPOON_DEBUG_HITBOX) {
+        push();
+        // Use displayed position when held, otherwise base position
+        const detectX =
+          this.spoonIsHeld && this.spoonDisplayX
+            ? this.spoonDisplayX
+            : this.spoonX;
+        const detectY =
+          this.spoonY +
+          (this.spoonLift || 0) +
+          (typeof SPOON_HITBOX_Y_OFFSET !== "undefined"
+            ? SPOON_HITBOX_Y_OFFSET
+            : 0);
+
+        // Draw rotated ellipse matching spoon orientation and size
+        noFill();
+        stroke(0, 255, 120);
+        strokeWeight(2);
+        push();
+        translate(detectX, detectY);
+        rotate(this.spoonRotation || 0);
+        const drawW =
+          this.spoonWidth *
+          (this.spoonScale || 1) *
+          (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+            ? SPOON_HITBOX_WIDTH_SCALE
+            : 1);
+        const drawH =
+          this.spoonHeight *
+          (this.spoonScale || 1) *
+          (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+            ? SPOON_HITBOX_HEIGHT_SCALE
+            : 1);
+        ellipse(0, 0, drawW, drawH);
+        pop();
+
+        // Readout
+        noStroke();
+        fill(255);
+        textAlign(LEFT, TOP);
+        textSize(12);
+        const infoX = 12;
+        const infoY = BASE_HEIGHT - 80;
+        text(
+          `Spoon hitbox\nX=${detectX.toFixed(1)} Y=${detectY.toFixed(1)}\nW=${this.spoonWidth.toFixed(1)} H=${this.spoonHeight.toFixed(1)}`,
+          infoX,
+          infoY,
+        );
+        pop();
+      }
+
+      // When mix is complete and the mouse is over the spoon, show a tooltip
+      // instead of lifting the spoon. Tooltip appears above the spoon and
+      // points to it with a small triangular pointer.
+      const showAlreadyMixedTooltip =
+        insideEllipse &&
+        !this.spoonIsHeld &&
+        this.mixMeterComplete &&
+        !this.isOrderOpen &&
+        !anyVialHeld &&
+        !anyVialActive;
+
+      if (showAlreadyMixedTooltip) {
+        push();
+        rectMode(CENTER);
+        noStroke();
+
+        // Tooltip dimensions (base coords) — much smaller
+        const tooltipW = 140;
+        const tooltipH = 28;
+        const tipH = 6; // triangle height
+        // Position the tooltip just above the spoon detection point,
+        // shifted left by 30px per design request
+        const tx = spoonDetectX - 30;
+        const ty =
+          spoonDetectY - (this.spoonHeight || 120) / 2 - 6 - tooltipH / 2;
+
+        // Draw tooltip with a stroked gold border and dark fill
+        push();
+        rectMode(CENTER);
+        stroke("#90701A");
+        strokeWeight(2);
+        fill("#2D1A10");
+        rect(tx, ty, tooltipW, tooltipH, 8);
+        pop();
+
+        // Pointer: draw triangle using the same gold color as the stroke
+        const tipX = tx;
+        const tipY = ty + tooltipH / 2 + tipH / 2 + 1;
+        push();
+        stroke("#90701A");
+        strokeWeight(2);
+        fill("#90701A");
+        triangle(
+          tipX - 7,
+          tipY - tipH / 2 + 1,
+          tipX + 7,
+          tipY - tipH / 2 + 1,
+          tipX,
+          tipY + tipH / 2 - 1,
+        );
+        pop();
+
+        // Text
+        fill("#F5E6D1");
+        textAlign(CENTER, CENTER);
+        textFont("IM Fell English");
+        textSize(14);
+        text("Already mixed!", tx, ty + 2);
+
+        pop();
+      }
     }
 
     this.vials.forEach((vial) => {
@@ -1410,6 +1607,7 @@ class Level {
           !this.isOrderOpen &&
           !anyVialHeld && // suppress other vial hover while one is held
           !anyVialActive && // suppress hover while any vial is active (pouring)
+          !spoonActive && // suppress vial hover while spoon is active
           adjustedMX_v > vial.x - halfW_v &&
           adjustedMX_v < vial.x + halfW_v &&
           adjustedMY_v > vial.y - halfH_v &&
@@ -1958,6 +2156,7 @@ class Level {
     const isEnvHovered =
       !anyVialHeld &&
       !this.vials.some((v) => v.isMoving) &&
+      !spoonActive &&
       adjustedMX > env.x - env.w / 2 &&
       adjustedMX < env.x + env.w / 2 &&
       adjustedMY > env.y - envHeight / 2 &&
@@ -2094,19 +2293,51 @@ class Level {
       drawingContext.clip();
 
       if (!this.orderStarted) {
-        // ---- FIRST CARD: Beginner's Luck ----
+        // Card background (beige rounded rectangle)
         push();
         rectMode(CORNER);
-        fill("#F5E6D1");
         noStroke();
-        rect(
-          cardLeft,
-          cardTop - this.orderScrollOffset,
-          cardWidth,
-          singleCardHeight,
-          8,
-        );
+        fill("#F5E6D1");
+        rect(cardLeft, cardTop, cardWidth, singleCardHeight, 10);
         pop();
+        // ---- FIRST CARD: Beginner's Luck ----
+        // Optional debug info (render only when debug overlay enabled)
+        if (typeof SPOON_DEBUG_HITBOX !== "undefined" && SPOON_DEBUG_HITBOX) {
+          push();
+          rectMode(CORNER);
+          fill("#F5E6D1");
+          noStroke();
+          const detectX =
+            this.spoonIsHeld && this.spoonDisplayX
+              ? this.spoonDisplayX
+              : this.spoonX;
+          const detectY =
+            this.spoonY +
+            (this.spoonLift || 0) +
+            (typeof SPOON_HITBOX_Y_OFFSET !== "undefined"
+              ? SPOON_HITBOX_Y_OFFSET
+              : 0);
+          const drawW =
+            this.spoonWidth *
+            (this.spoonScale || 1) *
+            (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+              ? SPOON_HITBOX_WIDTH_SCALE
+              : 1);
+          const drawH =
+            this.spoonHeight *
+            (this.spoonScale || 1) *
+            (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+              ? SPOON_HITBOX_HEIGHT_SCALE
+              : 1);
+          const infoX = 12;
+          const infoY = BASE_HEIGHT - 80;
+          text(
+            `Spoon hitbox\nX=${detectX.toFixed(1)} Y=${detectY.toFixed(1)}\nW=${drawW.toFixed(1)} H=${drawH.toFixed(1)}\nY-offset=${typeof SPOON_HITBOX_Y_OFFSET !== "undefined" ? SPOON_HITBOX_Y_OFFSET : 0}\nW-scale=${typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined" ? SPOON_HITBOX_WIDTH_SCALE : 1} H-scale=${typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined" ? SPOON_HITBOX_HEIGHT_SCALE : 1}`,
+            infoX,
+            infoY,
+          );
+          pop();
+        }
 
         // Card heading - varies by level
         push();
@@ -2769,6 +3000,12 @@ function levelMousePressed() {
   const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
   const adjustedX = (mouseX - offsetX) / scaleFactor;
   const adjustedY = (mouseY - offsetY) / scaleFactor;
+  // Consider spoon 'active' when picked up and moved away from its base
+  const spoonActive =
+    levelInstance.spoonIsHeld &&
+    Math.abs(
+      (levelInstance.spoonDisplayX || 0) - (levelInstance.spoonBaseX || 0),
+    ) > 1;
 
   // If a result overlay is active, forward clicks to it (BASE coords)
   if (levelInstance.levelResult && typeof Results !== "undefined") {
@@ -2851,6 +3088,121 @@ function levelMousePressed() {
     return; // block clicks behind overlay
   }
 
+  // ---- Spoon Click (moved early) ----
+  // Use the current displayed spoon position when held, otherwise use base coords.
+  const spoonDetectX =
+    levelInstance.spoonIsHeld && levelInstance.spoonDisplayX
+      ? levelInstance.spoonDisplayX
+      : levelInstance.spoonX;
+  const spoonDetectY =
+    levelInstance.spoonY +
+    (levelInstance.spoonLift || 0) +
+    (typeof SPOON_HITBOX_Y_OFFSET !== "undefined" ? SPOON_HITBOX_Y_OFFSET : 0);
+  // If the spoon is currently held, any click should drop it (user requested).
+  if (levelInstance.spoonIsHeld) {
+    // Drop spoon and reset tracking immediately regardless of click location
+    levelInstance.spoonIsHeld = false;
+    levelInstance.isActivelyStirring = false;
+    levelInstance.holdNoMovementStartFrame = null;
+    if (levelInstance.stirringSound && !levelInstance.stirringSound.paused) {
+      levelInstance.stirringSound.pause();
+      levelInstance.stirringSound.currentTime = 0;
+    }
+    // Reset targets so spoon smoothly returns
+    levelInstance.targetSpoonScale = 1.0;
+    levelInstance.targetSpoonRotation = levelInstance.spoonBaseRotation;
+    levelInstance.targetSpoonDisplayX = levelInstance.spoonBaseX;
+    levelInstance.spoonMouseStartX = 0;
+    levelInstance.spoonMouseStartY = 0;
+    return;
+  }
+
+  if (spoonDetectX) {
+    // Rotated-ellipse hit test using canvas Path2D to match the drawn ellipse exactly.
+    const drawW =
+      levelInstance.spoonWidth *
+      (levelInstance.spoonScale || 1) *
+      (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+        ? SPOON_HITBOX_WIDTH_SCALE
+        : 1);
+    const drawH =
+      levelInstance.spoonHeight *
+      (levelInstance.spoonScale || 1) *
+      (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+        ? SPOON_HITBOX_HEIGHT_SCALE
+        : 1);
+    const a = drawW / 2;
+    const b = drawH / 2;
+    // Create a Path2D ellipse centered at spoonDetectX, spoonDetectY with rotation
+    try {
+      // Use Path2D if available, but ensure we test using the same transform
+      // as drawing: translate -> rotate -> scale. To avoid transform mismatch
+      // issues, transform the click point into the spoon's local space
+      // using the inverse transform and test against the unscaled ellipse.
+      const dx = adjustedX - spoonDetectX;
+      const dy = adjustedY - spoonDetectY;
+      const r = levelInstance.spoonRotation || 0; // radians
+      const s = levelInstance.spoonScale || 1;
+      const cosR = Math.cos(r);
+      const sinR = Math.sin(r);
+      // Apply inverse rotation (-r) then inverse scale (divide by s)
+      const lx = (dx * cosR + dy * sinR) / s;
+      const ly = (-dx * sinR + dy * cosR) / s;
+      // Use unscaled semi-axes (based on original image size)
+      const aUnscaled =
+        (levelInstance.spoonWidth / 2) *
+        (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+          ? SPOON_HITBOX_WIDTH_SCALE
+          : 1);
+      const bUnscaled =
+        (levelInstance.spoonHeight / 2) *
+        (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+          ? SPOON_HITBOX_HEIGHT_SCALE
+          : 1);
+      const insideEllipseMath =
+        aUnscaled > 0 &&
+        bUnscaled > 0 &&
+        (lx * lx) / (aUnscaled * aUnscaled) +
+          (ly * ly) / (bUnscaled * bUnscaled) <=
+          1;
+      if (insideEllipseMath) {
+        levelInstance.spoonIsHeld = true;
+        levelInstance.spoonMouseStartX = 0;
+        levelInstance.spoonMouseStartY = 0;
+        return;
+      }
+    } catch (e) {
+      // If Path2D/ellipse not supported, fall back to math test
+      const dx = adjustedX - spoonDetectX;
+      const dy = adjustedY - spoonDetectY;
+      const r = levelInstance.spoonRotation || 0;
+      const cosR = Math.cos(r);
+      const sinR = Math.sin(r);
+      const lx = dx * cosR + dy * sinR;
+      const ly = -dx * sinR + dy * cosR;
+      const aScaled =
+        (a || 0) *
+        (typeof SPOON_HITBOX_WIDTH_SCALE !== "undefined"
+          ? SPOON_HITBOX_WIDTH_SCALE
+          : 1);
+      const bScaled =
+        (b || 0) *
+        (typeof SPOON_HITBOX_HEIGHT_SCALE !== "undefined"
+          ? SPOON_HITBOX_HEIGHT_SCALE
+          : 1);
+      const insideEllipse =
+        aScaled > 0 &&
+        bScaled > 0 &&
+        (lx * lx) / (aScaled * aScaled) + (ly * ly) / (bScaled * bScaled) <= 1;
+      if (insideEllipse) {
+        levelInstance.spoonIsHeld = true;
+        levelInstance.spoonMouseStartX = 0;
+        levelInstance.spoonMouseStartY = 0;
+        return;
+      }
+    }
+  }
+
   // Check if a bottle is currently being held
   const heldVial = levelInstance.vials.find((v) => v.isHeld);
 
@@ -2911,19 +3263,6 @@ function levelMousePressed() {
     }
   });
 
-  // ---- Spoon Click ----
-  if (
-    levelInstance.spoonX &&
-    !levelInstance.spoonIsHeld &&
-    adjustedX > levelInstance.spoonX - levelInstance.spoonWidth / 2 &&
-    adjustedX < levelInstance.spoonX + levelInstance.spoonWidth / 2 &&
-    adjustedY > levelInstance.spoonY - levelInstance.spoonHeight / 2 &&
-    adjustedY < levelInstance.spoonY + levelInstance.spoonHeight / 2
-  ) {
-    levelInstance.spoonIsHeld = true;
-    return;
-  }
-
   // ---- Envelope Icon Click ----
   const env = layout.envelope;
   const envHeight =
@@ -2931,6 +3270,7 @@ function levelMousePressed() {
       levelInstance.assets.envelopeImg.width) *
     env.w;
   if (
+    !spoonActive &&
     adjustedX > env.x - env.w / 2 &&
     adjustedX < env.x + env.w / 2 &&
     adjustedY > env.y - envHeight / 2 &&
@@ -2974,6 +3314,7 @@ function levelMousePressed() {
       levelInstance.assets.recipeBookClosed.width) *
     r.w;
   if (
+    !spoonActive &&
     adjustedX > r.x - r.w / 2 &&
     adjustedX < r.x + r.w / 2 &&
     adjustedY > r.y - rHeight / 2 &&

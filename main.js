@@ -310,10 +310,9 @@ function mousePressed() {
 // mouseReleased() runs once each time the mouse is released
 // ------------------------------
 function mouseReleased() {
-  // Release the spoon when mouse button is released
-  if (currentScreen === "level" && levelInstance) {
-    levelInstance.spoonIsHeld = false;
-  }
+  // Mouse release no longer forcibly drops the spoon. Spoon pickup/drop is
+  // handled via clicks (toggle) inside `levelMousePressed()` so we avoid
+  // interrupting the click-to-pick behaviour.
 }
 
 // ------------------------------
@@ -329,6 +328,124 @@ function keyPressed() {
       currentScreen = "start";
     }
     return;
+  }
+
+  // --------- Debug / testing shortcuts (global) ---------
+  // Level jumps: 1, 2
+  if (key === "1") {
+    jumpToLevel(1);
+    return;
+  }
+  if (key === "2") {
+    jumpToLevel(2);
+    return;
+  }
+
+  // Result jumps: A-F -> show result banners for quick testing
+  if (typeof key === "string") {
+    const k = key.toUpperCase();
+    if (k === "A") {
+      jumpToLevelResult(1, "CORRECT");
+      return;
+    }
+    if (k === "B") {
+      jumpToLevelResult(1, "WRONG");
+      return;
+    }
+    if (k === "C") {
+      jumpToLevelResult(1, "TIMEOUT");
+      return;
+    }
+    if (k === "D") {
+      jumpToLevelResult(2, "CORRECT");
+      return;
+    }
+    if (k === "E") {
+      jumpToLevelResult(2, "WRONG");
+      return;
+    }
+    if (k === "F") {
+      jumpToLevelResult(2, "TIMEOUT");
+      return;
+    }
+
+    // H: open map and toggle hitbox overlay (works from anywhere)
+    if (k === "H") {
+      // Ensure we are on the map so the overlay is visible
+      if (currentScreen !== "map") currentScreen = "map";
+      // Toggle overlay flag (declared in map.js)
+      if (typeof MAP_DEBUG_HITBOX === "undefined") {
+        window.MAP_DEBUG_HITBOX = true;
+      } else {
+        MAP_DEBUG_HITBOX = !MAP_DEBUG_HITBOX;
+      }
+      return;
+    }
+    // G: toggle spoon hitbox debug overlay
+    if (k === "G") {
+      if (typeof SPOON_DEBUG_HITBOX === "undefined") {
+        window.SPOON_DEBUG_HITBOX = true;
+      } else {
+        SPOON_DEBUG_HITBOX = !SPOON_DEBUG_HITBOX;
+      }
+      return;
+    }
+
+    // Tuning keys that currently affect Level 1 hitbox values only
+    // Left / Right: J / L
+    if (k === "J") {
+      level1RelX -= 0.005;
+      return;
+    }
+    if (k === "L") {
+      level1RelX += 0.005;
+      return;
+    }
+    // Up / Down: I / K
+    if (k === "I") {
+      level1RelY -= 0.005;
+      return;
+    }
+    if (k === "K") {
+      level1RelY += 0.005;
+      return;
+    }
+    // Smaller / Larger: N / M
+    if (k === "N") {
+      level1RelDiameter = max(0.02, level1RelDiameter - 0.005);
+      return;
+    }
+    if (k === "M") {
+      level1RelDiameter = min(0.6, level1RelDiameter + 0.005);
+      return;
+    }
+
+    // Save / Load Level 1 hitbox: P -> save, 0 -> load
+    if (k === "P") {
+      if (typeof localStorage !== "undefined") {
+        const payload = { x: level1RelX, y: level1RelY, d: level1RelDiameter };
+        localStorage.setItem("level1Hitbox", JSON.stringify(payload));
+        console.log("Saved Level 1 hitbox:", payload);
+      }
+      return;
+    }
+    if (k === "0") {
+      if (typeof localStorage !== "undefined") {
+        const raw = localStorage.getItem("level1Hitbox");
+        if (raw) {
+          try {
+            const obj = JSON.parse(raw);
+            level1RelX = obj.x;
+            level1RelY = obj.y;
+            level1RelDiameter = obj.d;
+            console.log("Loaded Level 1 hitbox:", obj);
+          } catch (e) {
+            console.warn("Failed to parse saved hitbox", e);
+          }
+        }
+      }
+      return;
+    }
   }
 
   // Each screen *may* define a key handler:
