@@ -665,24 +665,29 @@ class Level {
       rectMode(CORNER);
       rect(0, 0, BASE_WIDTH, BASE_HEIGHT);
 
+
       // Draw a centered dialog box (dark panel with gold border) matching the screenshot
-      const dialogW = this._introDebug.dialogW || 520;
-      const dialogH = this._introDebug.dialogH || 260;
+      // Use fixed defaults to match the screenshot exactly unless debug overrides are set
+      const dialogW = this._introDebug.dialogW || 384;
+      const dialogH = this._introDebug.dialogH || 236;
       const dialogX = BASE_WIDTH / 2 - dialogW / 2 + (this._introDebug.xOffset || 0);
       const dialogY = BASE_HEIGHT / 2 - dialogH / 2 + (this._introDebug.yOffset || 0);
 
-      // Outer border
-      stroke(200, 150, 60);
-      strokeWeight(3);
-      fill(38, 28, 20);
+      // Outer border (thicker gold outline)
+      stroke(212, 156, 63);
+      strokeWeight(4);
+      fill(36, 26, 22);
       rectMode(CORNER);
-      rect(dialogX, dialogY, dialogW, dialogH, 10);
+      rect(dialogX, dialogY, dialogW, dialogH, 12);
 
-      // Slight inner panel to give depth
-      noStroke();
-      fill(30, 22, 18);
-      const innerPad = 12;
+      // Slight inner panel to give depth and the dark inset
+      // Draw a subtle inner stroke then fill to mimic the screenshot
+      const innerPad = 10;
+      stroke(30, 22, 18);
+      strokeWeight(2);
+      fill(34, 24, 20);
       rect(dialogX + innerPad, dialogY + innerPad, dialogW - innerPad * 2, dialogH - innerPad * 2, 8);
+      noStroke();
 
       // Centered message inside the dialog
       const cx = BASE_WIDTH / 2 + (this._introDebug.xOffset || 0);
