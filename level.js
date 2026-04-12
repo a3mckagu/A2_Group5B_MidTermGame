@@ -203,6 +203,25 @@ class Level {
               symbol: assets.greenSymbol,
               colour: "darkgreen2",
             },
+            // Level 3 additional vials
+            ...(this.levelNumber > 2
+              ? [
+                  {
+                    id: "lightpurple2",
+                    img: assets.bottleLightpurple2,
+                    openImg: assets.bottleOpenLightpurple2,
+                    symbol: assets.greenSymbol,
+                    colour: "lightpurple2",
+                  },
+                  {
+                    id: "teal2",
+                    img: assets.bottleTeal2,
+                    openImg: assets.bottleOpenTeal2,
+                    symbol: assets.blueSymbol,
+                    colour: "teal2",
+                  },
+                ]
+              : []),
           ]
         : []),
       {
@@ -331,6 +350,19 @@ class Level {
     this.envelopeScale = 1;
     this.orderStarted = false;
     this.sequenceInvalid = false;
+    this.recipeIntroShown = false; // whether the Level 3 intro has been shown
+    this.showRecipeIntro = false; // runtime flag to display the intro modal
+    this._recipeIntroBtn = null;
+
+    // Intro modal debug controls (interactive tuning)
+    this._introDebug = {
+      enabled: false,
+      dialogW: 520,
+      dialogH: 260,
+      alpha: 255,
+      xOffset: 0,
+      yOffset: 0,
+    };
 
     // Customer patience timer (starts when level first draws)
     this.patienceDuration = 120000; // 2 minutes in ms
@@ -610,6 +642,104 @@ class Level {
         : this.assets.levelBg;
     image(bgImage, 0, 0, BASE_WIDTH, BASE_HEIGHT);
     imageMode(CENTER);
+
+    // If a Level 3 intro modal is requested, render it and block input.
+    if (this.showRecipeIntro) {
+      push();
+      // Compute the book bounding box so we can place the intro text/button inside it
+      const openBook = this.assets && this.assets.recipeBookOpen ? this.assets.recipeBookOpen : null;
+      const bookW = 600;
+      const bookH = openBook ? (openBook.height / openBook.width) * bookW : 420;
+      const bookLeft = BASE_WIDTH / 2 - bookW / 2;
+      const bookTop = BASE_HEIGHT / 2 - bookH / 2;
+
+      // Draw the recipe-screen background first so the decorative border is visible
+      if (this.assets && this.assets.recipeBookBg) {
+        imageMode(CORNER);
+        image(this.assets.recipeBookBg, 0, 0, BASE_WIDTH, BASE_HEIGHT);
+      }
+
+      // Dim the rest of the screen with a solid black overlay (alpha tunable)
+      noStroke();
+      fill(0, this._introDebug.alpha || 255);
+      rectMode(CORNER);
+      rect(0, 0, BASE_WIDTH, BASE_HEIGHT);
+
+      // Draw a centered dialog box (dark panel with gold border) matching the screenshot
+      const dialogW = this._introDebug.dialogW || 520;
+      const dialogH = this._introDebug.dialogH || 260;
+      const dialogX = BASE_WIDTH / 2 - dialogW / 2 + (this._introDebug.xOffset || 0);
+      const dialogY = BASE_HEIGHT / 2 - dialogH / 2 + (this._introDebug.yOffset || 0);
+
+      // Outer border
+      stroke(200, 150, 60);
+      strokeWeight(3);
+      fill(38, 28, 20);
+      rectMode(CORNER);
+      rect(dialogX, dialogY, dialogW, dialogH, 10);
+
+      // Slight inner panel to give depth
+      noStroke();
+      fill(30, 22, 18);
+      const innerPad = 12;
+      rect(dialogX + innerPad, dialogY + innerPad, dialogW - innerPad * 2, dialogH - innerPad * 2, 8);
+
+      // Centered message inside the dialog
+      const cx = BASE_WIDTH / 2 + (this._introDebug.xOffset || 0);
+      let y = dialogY + dialogH * 0.28 + (this._introDebug.yOffset || 0);
+      textAlign(CENTER, CENTER);
+      textFont(FONT_IM_FELL_ENGLISH);
+      textStyle(ITALIC);
+      textSize(26);
+      fill(245, 225, 180);
+      const quote = "The lights have gone out.\nGood thing you have a candle.";
+      text(quote, cx, y);
+
+      // Button placed inside the dialog near the lower-middle area
+      const btnW = 220;
+      const btnH = 44;
+      const btnX = cx - btnW / 2;
+      const btnY = dialogY + dialogH * 0.64;
+      this._recipeIntroBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+
+      // Button style and label
+      rectMode(CORNER);
+      fill(148, 110, 34);
+      noStroke();
+      rect(btnX, btnY, btnW, btnH, 8);
+      textFont(FONT_VT323);
+      textStyle(NORMAL);
+      textSize(20);
+      fill(255, 245, 220);
+      text("Very well.", cx, btnY + btnH / 2);
+
+      // Debug HUD: show dimensions and controls when enabled
+      if (this._introDebug.enabled) {
+        push();
+        rectMode(CORNER);
+        noStroke();
+        fill(0, 180);
+        rect(18, 18, 340, 120, 6);
+        fill(255);
+        textAlign(LEFT, TOP);
+        textFont(FONT_VT323);
+        textSize(14);
+        const lines = [
+          `DEBUG MODE: Intro modal`,
+          `Width: ${this._introDebug.dialogW}px  Height: ${this._introDebug.dialogH}px`,
+          `Alpha: ${this._introDebug.alpha}`,
+          `Arrows: change size  Shift+Arrows for larger steps`,
+          `R: reset  T: toggle debug`,
+        ];
+        for (let i = 0; i < lines.length; i++) {
+          text(lines[i], 28, 24 + i * 18);
+        }
+        pop();
+      }
+
+      pop();
+      return;
+    }
 
     // If the recipe book is open, render the focused recipe screen here and
     // return early so no gameplay elements are drawn or interactable.
@@ -2729,11 +2859,13 @@ class Level {
     textSize(15);
     textAlign(CENTER, TOP);
     fill(96, 56, 19, 140);
-    text(
-      this.levelNumber === 2 ? "VOL. II" : "VOL. I",
-      leftPageCX,
-      bookTop + 36,
-    );
+    const volLabel =
+      this.levelNumber === 3
+        ? "VOL. III"
+        : this.levelNumber === 2
+          ? "VOL. II"
+          : "VOL. I";
+    text(volLabel, leftPageCX, bookTop + 36);
 
     // — Top ornamental rule + diamond —
     const ruleY1 = bookTop + 56;
@@ -2834,12 +2966,16 @@ class Level {
     // All coordinates are in BASE_WIDTH / BASE_HEIGHT space.
     // Diagram centroid sits at (726, 298) — right half of the open book.
     const SHIFT_X = 12; // nudge entire diagram right by this many pixels
+    const DIAGRAM_NUDGE_UP = 28; // move diagram higher on the page
     const CX = 726 + SHIFT_X,
-      CY = 298; // centroid
+      CY = 298 - DIAGRAM_NUDGE_UP; // centroid (nudged up)
     const RING_R = 89; // outer ring radius
     const INNER_R = 36; // inner ring radius
     const SYM = 28; // symbol render size (square)
     const LABEL_ALPHA = 200; // opacity for flavour text (0-255)
+
+    // Allow the ring radius to expand for special layouts (e.g., Level 3 star)
+    const effectiveRingR = this.levelNumber === 3 ? RING_R * 1.35 : RING_R;
 
     // ---- Right page bottom warning (aligned with "Nearly there.") ----
     textFont(FONT_IM_FELL_ENGLISH);
@@ -2849,12 +2985,19 @@ class Level {
     fill(96, 56, 19, 175);
     // Align X with the 'Nearly there.' label at 726 + SHIFT_X
     const rightWarnX = 726 + SHIFT_X;
-    text("Activate with Catalyst Crystal", rightWarnX, _warnRuleY - 27);
+    // Move the line down slightly for Level 3 so it doesn't overlap the star
+    const rightWarnYOffset = this.levelNumber === 3 ? -17 : -27;
+    text(
+      "Activate with Catalyst Crystal",
+      rightWarnX,
+      _warnRuleY + rightWarnYOffset,
+    );
     textStyle(NORMAL);
 
     // Define vertices based on level
     // Level 1: Triangle with 3 vials
-    // Level 2 and Level 3+: Pentagon with 5 vials
+    // Level 2: Pentagon with 5 vials
+    // Level 3: 7-point star (heptagram) with 7 vials
     let vertices;
     if (this.levelNumber === 1) {
       // Triangle layout on the outer ring: bottom-left, bottom-right, top-center
@@ -2879,8 +3022,36 @@ class Level {
           label: "Last vial.",
         },
       ];
+    } else if (this.levelNumber === 3) {
+      // 7-point star layout: compute 7 outer points on the outer ring
+      const STAR_POINTS = 7;
+      // make the star 'thinner' by using a larger outer radius
+      const starOuterR = RING_R * 1.35;
+      const symbolList = [
+        this.assets.symbolBlack,
+        this.assets.symbolDarkgreen || this.assets.symbolDarkgreen,
+        this.assets.symbolMidblue,
+        this.assets.symbolLightpurple,
+        this.assets.symbolLightgreen,
+        this.assets.symbolOrange,
+        this.assets.symbolTeal,
+      ];
+      vertices = [];
+      // Start at -90deg so one point is at the top
+      const startAng = -HALF_PI;
+      for (let i = 0; i < STAR_POINTS; i++) {
+        const ang = startAng + (TWO_PI * i) / STAR_POINTS;
+        const vx = CX + Math.cos(ang) * starOuterR;
+        const vy = CY + Math.sin(ang) * starOuterR;
+        vertices.push({
+          x: vx,
+          y: vy,
+          img: symbolList[i % symbolList.length],
+          label: `Point ${i + 1}.`,
+        });
+      }
     } else {
-      // Pentagon layout for level 2 and level 3+
+      // Pentagon layout for level 2 and level 4+
       vertices = [
         {
           x: 810 + SHIFT_X,
@@ -2922,21 +3093,34 @@ class Level {
     stroke(90, 55, 18, 46); // rgba(90,55,18,0.18) → alpha ~46
     strokeWeight(1);
     ellipseMode(CENTER);
-    circle(CX, CY, RING_R * 2);
+    circle(CX, CY, effectiveRingR * 2);
     stroke(90, 55, 18, 26);
     circle(CX, CY, INNER_R * 2);
 
-    // -- Polygon outline (triangle for level 1, square for level 2, pentagon for level 3+) --
+    // -- Outline (polygon or star depending on level) --
     stroke(90, 55, 18, 28);
     strokeWeight(1);
     noFill();
-    beginShape();
-    for (const v of vertices) vertex(v.x, v.y);
-    endShape(CLOSE);
+    if (this.levelNumber === 3) {
+      // Draw a heptagram by connecting every 2nd outer point (7-point star)
+      const n = vertices.length;
+      const step = 2; // {7/2} heptagram
+      beginShape();
+      let idx = 0;
+      for (let i = 0; i < n; i++) {
+        vertex(vertices[idx].x, vertices[idx].y);
+        idx = (idx + step) % n;
+      }
+      endShape(CLOSE);
+    } else {
+      beginShape();
+      for (const v of vertices) vertex(v.x, v.y);
+      endShape(CLOSE);
+    }
 
     // -- Spokes from centroid to each vertex --
     stroke(90, 55, 18, 18);
-    strokeWeight(0.8);
+    strokeWeight(this.levelNumber === 3 ? 0.6 : 0.8);
     for (const v of vertices) {
       line(CX, CY, v.x, v.y);
     }
@@ -2944,10 +3128,12 @@ class Level {
     // -- Symbols (vial images) centred on each vertex --
     imageMode(CENTER);
     noStroke();
+    // reduce symbol size slightly for Level 3 so they don't overlap
+    const symbolSize = this.levelNumber === 3 ? SYM * 0.85 : SYM;
     for (const v of vertices) {
       if (v.img) {
-        const h = (v.img.height / v.img.width) * SYM;
-        image(v.img, v.x, v.y, SYM, h);
+        const h = (v.img.height / v.img.width) * symbolSize;
+        image(v.img, v.x, v.y, symbolSize, h);
       }
     }
 
@@ -3393,6 +3579,19 @@ function levelMousePressed() {
     return;
   }
 
+  // If intro modal is visible, handle its button click (block all other clicks)
+  if (levelInstance.showRecipeIntro) {
+    const b = levelInstance._recipeIntroBtn;
+    if (b) {
+      if (adjustedX > b.x && adjustedX < b.x + b.w && adjustedY > b.y && adjustedY < b.y + b.h) {
+        levelInstance.showRecipeIntro = false;
+        levelInstance.isRecipeOpen = true; // now show the actual recipe
+        return;
+      }
+    }
+    return;
+  }
+
   // ---- Recipe Book Close Button ----
   if (levelInstance.isRecipeOpen) {
     const openBook = levelInstance.assets.recipeBookOpen;
@@ -3433,6 +3632,18 @@ function levelMousePressed() {
     adjustedY > r.y - rHeight / 2 &&
     adjustedY < r.y + rHeight / 2
   ) {
+    // If Level 3 and the order has started, show the intro modal the first
+    // time the player opens the recipe book.
+    if (
+      levelInstance.levelNumber === 3 &&
+      levelInstance.orderStarted &&
+      !levelInstance.recipeIntroShown
+    ) {
+      levelInstance.showRecipeIntro = true;
+      levelInstance.recipeIntroShown = true;
+      return;
+    }
+
     levelInstance.isRecipeOpen = true;
     return;
   }
@@ -3455,10 +3666,90 @@ function levelKeyPressed() {
   // Escape is handled globally in main.js
   if (!levelInstance) return;
   // Debug shortcut: press '3' to jump to Level 3
-  if (typeof key !== 'undefined' && key === '3') {
+  if (typeof key !== "undefined" && key === "3") {
     currentLevelNumber = 3;
     createLevelInstance();
-    currentScreen = 'level';
+    currentScreen = "level";
     return;
+  }
+
+  // Intro modal debug controls
+  if (levelInstance.showRecipeIntro && levelInstance._introDebug) {
+    // Toggle debug HUD
+    if (typeof key !== "undefined" && (key === "T" || key === "t")) {
+      levelInstance._introDebug.enabled = !levelInstance._introDebug.enabled;
+      console.log("Intro debug:", levelInstance._introDebug.enabled);
+      return;
+    }
+
+    if (levelInstance._introDebug.enabled) {
+      // Determine step size (shift = larger step)
+      const step = keyIsDown(SHIFT) ? 40 : 8;
+      if (keyCode === LEFT_ARROW) {
+        levelInstance._introDebug.dialogW = Math.max(160, levelInstance._introDebug.dialogW - step);
+        return;
+      }
+      if (keyCode === RIGHT_ARROW) {
+        levelInstance._introDebug.dialogW = Math.min(BASE_WIDTH - 40, levelInstance._introDebug.dialogW + step);
+        return;
+      }
+      if (keyCode === UP_ARROW) {
+        levelInstance._introDebug.dialogH = Math.max(120, levelInstance._introDebug.dialogH - step);
+        return;
+      }
+      if (keyCode === DOWN_ARROW) {
+        levelInstance._introDebug.dialogH = Math.min(BASE_HEIGHT - 40, levelInstance._introDebug.dialogH + step);
+        return;
+      }
+      // Alpha adjustments: '[' / ']'
+      if (typeof key === "string" && key === "[") {
+        levelInstance._introDebug.alpha = Math.max(0, (levelInstance._introDebug.alpha || 255) - 10);
+        return;
+      }
+      if (typeof key === "string" && key === "]") {
+        levelInstance._introDebug.alpha = Math.min(255, (levelInstance._introDebug.alpha || 255) + 10);
+        return;
+      }
+      // Reset
+      if (typeof key === "string" && (key === "R" || key === "r")) {
+        levelInstance._introDebug.dialogW = 520;
+        levelInstance._introDebug.dialogH = 260;
+        levelInstance._introDebug.alpha = 255;
+        levelInstance._introDebug.xOffset = 0;
+        levelInstance._introDebug.yOffset = 0;
+        return;
+      }
+      // Save debug config to localStorage (P)
+      if (typeof key === "string" && (key === "P" || key === "p")) {
+        if (typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem(
+              "introDebug",
+              JSON.stringify(levelInstance._introDebug),
+            );
+            console.log("Saved introDebug to localStorage:", levelInstance._introDebug);
+          } catch (e) {
+            console.warn("Failed to save introDebug", e);
+          }
+        }
+        return;
+      }
+      // Load debug config from localStorage (0)
+      if (typeof key === "string" && key === "0") {
+        if (typeof localStorage !== "undefined") {
+          const raw = localStorage.getItem("introDebug");
+          if (raw) {
+            try {
+              const obj = JSON.parse(raw);
+              levelInstance._introDebug = Object.assign(levelInstance._introDebug || {}, obj);
+              console.log("Loaded introDebug:", levelInstance._introDebug);
+            } catch (e) {
+              console.warn("Failed to parse saved introDebug", e);
+            }
+          }
+        }
+        return;
+      }
+    }
   }
 }
