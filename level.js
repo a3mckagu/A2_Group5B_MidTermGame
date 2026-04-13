@@ -78,6 +78,10 @@ class Level {
     this.flashlightActive = false;
     this.flashlightRadius = 100;
 
+    // Help button state (question-mark to the left of the envelope)
+    this.helpButtonScale = 1.0;
+    this.isHelpOpen = false; // kept for future use if overlay is desired
+
     // ---- VIALS CONFIGURATION ----
     // Define all vials (regular bottles + crystal) with their properties
     const vialsConfig = [
@@ -374,20 +378,7 @@ class Level {
     this.showRecipeIntro = false; // runtime flag to display the intro modal
     this._recipeIntroBtn = null;
 
-    // Envelope guide text for Level 1 (shows at start, fades out when envelope clicked)
-    this.envelopeGuideShown = false; // becomes true when level starts to trigger fade-in
-    this.envelopeClicked = false; // becomes true when player clicks envelope for first time
-    this.envelopeGuideAlpha = 0; // alpha for fade animation (0-255)
-    this.envelopeGuideFadeInProgress = false; // true while fading in
-    this.envelopeGuideFadeOutProgress = false; // true while fading out
-
-    // First vial guide text for Level 1 (only shows after envelope clicked)
-    this.firstVialPickedUp = false; // becomes true when player picks up first vial
-    this.firstVialPoured = false; // becomes true when player pours first vial
-    this.firstVialGuideAlpha = 0; // alpha for fade animation (0-255)
-    this.firstVialGuideFadeInProgress = false; // true while fading in
-    this.firstVialGuideFadeOutProgress = false; // true while fading out
-    this.FIRST_VIAL_FADE_SPEED = 8; // pixels per frame for alpha change
+    // Envelope / first-vial tutorial guides removed for Level 1
 
     // Customer patience timer (starts when level first draws)
     // Per-level durations:
@@ -545,20 +536,33 @@ class Level {
       this.currentSequenceIndex = 0;
       this.completedSequences = [];
     } else if (this.levelNumber === 2) {
-      // Level 2: explicit ordered steps including a mixing step which
-      // must be completed (mixMeterComplete) at the right time.
-      // Use the sentinel string 'MIX' to represent the required mix step.
-      this.correctOrder = [
-        assets.bottleBlack,
-        assets.bottleLightred,
-        assets.bottleMidblue,
-        assets.bottleLightpurple,
-        "MIX",
-        assets.bottleLightgreen,
+      // Level 2: single recipe with MIX step that can occur at different points.
+      // Both of these sequences are valid:
+      // 1) Black, Light Red, Mid Blue, Light Purple, MIX, Light Green
+      // 2) Black, Light Red, Mid Blue, Light Purple, Light Green, MIX
+      this.sequences = [
+        // Sequence A: MIX before Light Green
+        [
+          assets.bottleBlack,
+          assets.bottleLightred,
+          assets.bottleMidblue,
+          assets.bottleLightpurple,
+          "MIX",
+          assets.bottleLightgreen,
+        ],
+        // Sequence B: Light Green before MIX
+        [
+          assets.bottleBlack,
+          assets.bottleLightred,
+          assets.bottleMidblue,
+          assets.bottleLightpurple,
+          assets.bottleLightgreen,
+          "MIX",
+        ],
       ];
-      this.sequences = null;
+      this.correctOrder = null; // Use sequences instead
       this.currentSequenceIndex = 0;
-      this.completedSequences = [];
+      this.completedSequences = [false, false]; // Track both sequences
     } else {
       // Level 3: explicit ordered steps including a mixing step which
       // must be completed (mixMeterComplete) at the right time. Use the
@@ -618,9 +622,14 @@ class Level {
     this.holdNoMovementStartFrame = null; // frameCount when player started holding without moving
 
     // Level 2 new-item overlay
-    this.showNewItemOverlay = this.levelNumber === 2; // only show overlay on level 2
+    // Only show the Level 2 "new item" overlay the first time the player
+    // reaches Level 2. Respect a global flag so clicking "Proceed" prevents
+    // automatic redisplay or timed auto-advance.
+    this.showNewItemOverlay =
+      this.levelNumber === 2 && !window._seenNewItemOverlay;
     this.newItemOverlayStartTime = null; // ms timestamp when overlay started
     this.newItemOverlayDuration = 2000; // 5 seconds in milliseconds
+    this.newItemButtonPos = { x: 0, y: 0, w: 0, h: 0 }; // button position tracking
   }
 
   _shuffleArray(arr) {
@@ -663,8 +672,68 @@ class Level {
   }
 
   checkSequence() {
-    // Level 2 with multiple sequences
+    // Level 2 with multiple valid sequences (either sequence A or B is OK)
     if (this.sequences) {
+      // For Level 2, check if the sequence matches ANY of the valid sequences
+      if (this.levelNumber === 2) {
+        // Check if added ingredients match any of the valid sequences
+        let matchedSequenceIndex = -1;
+        for (let i = 0; i < this.sequences.length; i++) {
+          const seq = this.sequences[i];
+          const isMatch =
+            this.addedIngredients.length === seq.length &&
+            seq.every(
+              (bottleImg, index) => this.addedIngredients[index] === bottleImg,
+            );
+          if (isMatch) {
+            matchedSequenceIndex = i;
+            break;
+          }
+        }
+
+        // Check if adding more ingredients could invalidate all sequences
+        if (this.addedIngredients.length > 0) {
+          let canStillMatch = false;
+          for (let i = 0; i < this.sequences.length; i++) {
+            const seq = this.sequences[i];
+            // Check if current ingredients match start of this sequence
+            if (
+              this.addedIngredients.length <= seq.length &&
+              this.addedIngredients.every(
+                (bottleImg, index) => bottleImg === seq[index],
+              )
+            ) {
+              canStillMatch = true;
+              break;
+            }
+          }
+
+          // If no sequence can still match and we have ingredients, it's wrong
+          if (!canStillMatch && this.addedIngredients.length > 0) {
+            this.levelResult = "WRONG";
+            return;
+          }
+        }
+
+        // Only process when crystal is added
+        if (!this.crystalAdded) return;
+
+        // If mixing was performed out of order, override result to WRONG
+        if (this.sequenceInvalid) {
+          this.levelResult = "WRONG";
+          return;
+        }
+
+        // If a valid sequence was matched
+        if (matchedSequenceIndex >= 0) {
+          this.levelResult = "CORRECT";
+        } else {
+          this.levelResult = "WRONG";
+        }
+        return;
+      }
+
+      // Original multi-sequence logic for other levels
       const currentSequence = this.sequences[this.currentSequenceIndex];
       const isSequenceCorrect =
         this.addedIngredients.length === currentSequence.length &&
@@ -765,20 +834,101 @@ class Level {
         this.newItemOverlayStartTime = millis();
       }
 
-      // Calculate elapsed time since overlay started
-      const elapsedTime = millis() - this.newItemOverlayStartTime;
-
-      // If overlay time hasn't elapsed yet, show the overlay and return early
-      if (elapsedTime < this.newItemOverlayDuration) {
-        imageMode(CORNER);
-        if (this.assets && this.assets.newItemImg) {
-          image(this.assets.newItemImg, 0, 0, BASE_WIDTH, BASE_HEIGHT);
-        }
-        return;
-      } else {
-        // Overlay time complete, stop showing it
-        this.showNewItemOverlay = false;
+      // Display the overlay image
+      imageMode(CORNER);
+      if (this.assets && this.assets.newItemImg) {
+        image(this.assets.newItemImg, 0, 0, BASE_WIDTH, BASE_HEIGHT);
       }
+
+      push();
+
+      // Centered dialog box (matching Level 3 style)
+      const dialogW = 520;
+      const dialogH = 110;
+      const dialogX = BASE_WIDTH / 2 - dialogW / 2;
+      // Place dialog near the bottom of the screen with a small margin
+      // reduce margin so the dialog sits slightly lower on screen
+      const dialogY = BASE_HEIGHT - dialogH - 24;
+
+      // Outer border with gold trim
+      // Small visual offset for the box; increase slightly to move the box down
+      const boxOffsetY = 8;
+      // Small offset to move the dialog content (text/button) down slightly
+      const contentOffsetY = 4;
+      stroke(200, 150, 60);
+      strokeWeight(3);
+      // Use the same dark inner panel color for the outer panel for a flatter look
+      fill(30, 22, 18);
+      rectMode(CORNER);
+      rect(dialogX, dialogY + boxOffsetY, dialogW, dialogH, 10);
+
+      // Inner panel for depth (also offset)
+      noStroke();
+      fill(30, 22, 18);
+      const innerPad = 12;
+      rect(
+        dialogX + innerPad,
+        dialogY + innerPad + boxOffsetY,
+        dialogW - innerPad * 2,
+        dialogH - innerPad * 2,
+        8,
+      );
+
+      // Centered message inside the dialog
+      const cx = BASE_WIDTH / 2;
+      // Move the description up slightly so it sits higher in the visual box
+      let y = dialogY + dialogH * 0.32 + contentOffsetY;
+      textAlign(CENTER, CENTER);
+      textFont(FONT_IM_FELL_ENGLISH);
+      textStyle(NORMAL);
+      textSize(14);
+      // Use pure white for better contrast on this overlay
+      fill(255);
+      const descText =
+        "A gift of great power. Use it wisely \u2014 its magic only awakens at the right moment.";
+      // Render on a single line (no width param) so it doesn't wrap
+      text(descText, cx, y);
+
+      // Button positioned inside the dialog
+      const btnW = 160;
+      const btnH = 44;
+      const btnX = cx - btnW / 2;
+      // Nudge the button up very slightly for better spacing
+      const btnY = dialogY + dialogH * 0.58 + contentOffsetY - 6;
+      this.newItemButtonPos = { x: btnX, y: btnY, w: btnW, h: btnH };
+
+      // Button style with hover state
+      rectMode(CORNER);
+      const {
+        scaleFactor: _sf,
+        offsetX: _ox,
+        offsetY: _oy,
+      } = getScaleAndOffset();
+      const adjustedMX = (mouseX - _ox) / _sf;
+      const adjustedMY = (mouseY - _oy) / _sf;
+      const isBtnHovered =
+        adjustedMX > btnX &&
+        adjustedMX < btnX + btnW &&
+        adjustedMY > btnY &&
+        adjustedMY < btnY + btnH;
+
+      if (isBtnHovered) {
+        fill(162, 126, 50); // lighter on hover
+      } else {
+        fill(148, 110, 34);
+      }
+      noStroke();
+      rect(btnX, btnY, btnW, btnH, 8);
+      textFont(FONT_VT323);
+      textStyle(NORMAL);
+      textSize(18);
+      fill(255, 245, 220);
+      textAlign(CENTER, CENTER);
+      text("Proceed", cx, btnY + btnH / 2);
+
+      pop();
+
+      return;
     }
 
     // Background: if the recipe book is open and a recipe background is available,
@@ -841,10 +991,10 @@ class Level {
       const dialogX = BASE_WIDTH / 2 - dialogW / 2;
       const dialogY = BASE_HEIGHT / 2 - dialogH / 2;
 
-      // Outer border
+      // Outer border (use the inner dark panel color for the outer fill)
       stroke(200, 150, 60);
       strokeWeight(3);
-      fill(38, 28, 20);
+      fill(30, 22, 18);
       rectMode(CORNER);
       rect(dialogX, dialogY, dialogW, dialogH, 10);
 
@@ -1602,16 +1752,20 @@ class Level {
                 this.mixSuccessShowFrame = frameCount;
               // If this is Level 2 or Level 3, mixing must occur as the specific step.
               if (this.levelNumber === 2 || this.levelNumber === 3) {
-                // Expected index for the MIX sentinel (0-based)
-                const expectedMixIndex = 4; // after 4 vials
-                // If player has not added exactly the 4 preceding vials,
+                // Expected index for the MIX sentinel (0-based).
+                // Level 2 accepts MIX at index 4 (after 4 vials) OR index 5
+                // (after all 5 vials), since both sequences are valid.
+                // Level 3 requires MIX at index 4 only.
+                const ingredientCount = (this.addedIngredients || []).length;
+                const mixStepValid =
+                  this.levelNumber === 2
+                    ? ingredientCount === 4 || ingredientCount === 5
+                    : ingredientCount === 4;
+                // If player has not added the expected preceding vials,
                 // mixing now is invalid -> mark sequence invalid (defer final
                 // result until crystal is added so overlay doesn't show yet).
-                if ((this.addedIngredients || []).length !== expectedMixIndex) {
+                if (!mixStepValid) {
                   this.sequenceInvalid = true;
-                  console.log(
-                    "Mixing occurred out of order — sequence marked invalid",
-                  );
                 } else {
                   // Record the mix step so sequence comparisons succeed later.
                   // If a PARTIAL_MIX was previously recorded, upgrade it to a full MIX.
@@ -1620,10 +1774,8 @@ class Level {
                   );
                   if (PARTIAL_INDEX !== -1) {
                     this.addedIngredients[PARTIAL_INDEX] = "MIX";
-                    console.log("Upgraded PARTIAL_MIX to MIX");
                   } else if (!this.addedIngredients.includes("MIX")) {
                     this.addedIngredients.push("MIX");
-                    console.log("Mix step recorded");
                   }
                 }
               }
@@ -2133,7 +2285,6 @@ class Level {
                 vial.y = vial.pourY;
                 if (!this.addedIngredients.includes(vial.closedImg)) {
                   this.addedIngredients.push(vial.closedImg);
-                  console.log("Added ingredient:", vial.closedImg);
                 }
               } else if (vial.progress < 1.5 + returnDuration) {
                 // Return to shelf
@@ -2157,17 +2308,7 @@ class Level {
                 vial.droppedFromHeld = false;
                 vial.lockedStreamEndX = null;
 
-                // Trigger fade-out of first vial guide when first vial completes pour on Level 1
-                if (
-                  this.levelNumber === 1 &&
-                  this.firstVialPickedUp &&
-                  !this.firstVialPoured &&
-                  !vial.isCrystal
-                ) {
-                  this.firstVialPoured = true;
-                  this.firstVialGuideFadeInProgress = false;
-                  this.firstVialGuideFadeOutProgress = true;
-                }
+                // First-vial tutorial handling removed
 
                 // Play glass cling sound when vial returns to shelf (at 40% volume)
                 const glassReturnSound =
@@ -2189,7 +2330,6 @@ class Level {
                 vial.y = targetY;
                 if (!this.addedIngredients.includes(vial.closedImg)) {
                   this.addedIngredients.push(vial.closedImg);
-                  console.log("Added ingredient:", vial.closedImg);
                 }
               } else if (vial.progress < 3.0) {
                 const back = vial.progress - 1.5;
@@ -2204,17 +2344,7 @@ class Level {
                 // restore closed appearance after returning to shelf
                 vial.img = vial.closedImg;
 
-                // Trigger fade-out of first vial guide when first vial completes pour on Level 1
-                if (
-                  this.levelNumber === 1 &&
-                  this.firstVialPickedUp &&
-                  !this.firstVialPoured &&
-                  !vial.isCrystal
-                ) {
-                  this.firstVialPoured = true;
-                  this.firstVialGuideFadeInProgress = false;
-                  this.firstVialGuideFadeOutProgress = true;
-                }
+                // First-vial tutorial handling removed
 
                 // Play glass cling sound when vial returns to shelf (at 40% volume)
                 const glassReturnSound =
@@ -2722,103 +2852,7 @@ class Level {
       pop();
     }
 
-    // ========== ENVELOPE GUIDE OVERLAY (Level 1 only at start) ==========
-    // Display instructional text at game start, disappears when envelope is clicked
-    if (this.levelNumber === 1) {
-      // Trigger fade-in on first draw of Level 1
-      if (!this.envelopeGuideShown) {
-        this.envelopeGuideShown = true;
-        this.envelopeGuideFadeInProgress = true;
-      }
-
-      // Update alpha for fade animation
-      if (this.envelopeGuideFadeInProgress) {
-        this.envelopeGuideAlpha = Math.min(
-          255,
-          this.envelopeGuideAlpha + this.FIRST_VIAL_FADE_SPEED * 1.5,
-        );
-        if (this.envelopeGuideAlpha >= 240) {
-          this.envelopeGuideFadeInProgress = false;
-        }
-      } else if (this.envelopeGuideFadeOutProgress) {
-        this.envelopeGuideAlpha = Math.max(
-          0,
-          this.envelopeGuideAlpha - this.FIRST_VIAL_FADE_SPEED,
-        );
-      }
-
-      // Render guide text at top center with fade animation
-      if (this.envelopeGuideAlpha > 0) {
-        push();
-
-        // Position: top center of screen
-        const textX = BASE_WIDTH / 2;
-        const textY = 80;
-
-        // Draw very opaque yellow glow background
-        fill(206, 181, 58, this.envelopeGuideAlpha * 0.95); // very opaque yellow glow
-        rectMode(CENTER);
-        rect(textX, textY, 450, 50, 10);
-
-        // Draw text with dark brown color
-        textAlign(CENTER, CENTER);
-        textFont(FONT_IM_FELL_ENGLISH);
-        textStyle(ITALIC);
-        textSize(20);
-        fill(45, 9, 0, this.envelopeGuideAlpha); // dark brown #2D0900 with alpha
-        text("Unseal the letter to learn what's inside.", textX, textY);
-
-        pop();
-      }
-    }
-
-    // ========== FIRST VIAL GUIDE OVERLAY (Level 1 only, after envelope clicked) ==========
-    // Display instructional text when player picks up first vial
-    if (
-      this.levelNumber === 1 &&
-      this.envelopeClicked &&
-      this.firstVialPickedUp
-    ) {
-      // Update alpha for fade animation
-      if (this.firstVialGuideFadeInProgress) {
-        this.firstVialGuideAlpha = Math.min(
-          255,
-          this.firstVialGuideAlpha + this.FIRST_VIAL_FADE_SPEED * 1.5,
-        );
-        if (this.firstVialGuideAlpha >= 240) {
-          this.firstVialGuideFadeInProgress = false;
-        }
-      } else if (this.firstVialGuideFadeOutProgress) {
-        this.firstVialGuideAlpha = Math.max(
-          0,
-          this.firstVialGuideAlpha - this.FIRST_VIAL_FADE_SPEED,
-        );
-      }
-
-      // Render guide text at bottom center with fade animation
-      if (this.firstVialGuideAlpha > 0) {
-        push();
-
-        // Position: bottom center of screen
-        const textX = BASE_WIDTH / 2;
-        const textY = BASE_HEIGHT - 65;
-
-        // Draw very opaque yellow glow background
-        fill(206, 181, 58, this.firstVialGuideAlpha * 0.95); // very opaque yellow glow
-        rectMode(CENTER);
-        rect(textX, textY, 450, 50, 10);
-
-        // Draw text with dark brown color
-        textAlign(CENTER, CENTER);
-        textFont(FONT_IM_FELL_ENGLISH);
-        textStyle(ITALIC);
-        textSize(20);
-        fill(45, 9, 0, this.firstVialGuideAlpha); // dark brown #2D0900 with alpha
-        text("Drag vial to the cauldron's glow.", textX, textY);
-
-        pop();
-      }
-    }
+    // Envelope and first-vial tutorial overlays removed
 
     // (Held vial is drawn later so it can appear above UI elements)
 
@@ -2853,6 +2887,50 @@ class Level {
     translate(env.x, env.y);
     scale(this.envelopeScale);
     image(this.assets.envelopeImg, 0, 0, env.w, envHeight);
+    pop();
+
+    // ---- Help Button (rounded square left of envelope) ----
+    // Position and hover detection (suppressed while interacting with vials/spoon)
+    const helpBtnSize = 40; // slightly larger for tap targets
+    const helpBtnGap = 8; // gap between envelope and button
+    const helpBtnExtraLeft = 28; // additional left offset to move the button further away (nudged right 4px)
+    const helpBtnX =
+      env.x - env.w / 2 - helpBtnSize / 2 - helpBtnGap - helpBtnExtraLeft;
+    const helpBtnY = env.y;
+    const isHelpHovered =
+      !anyVialHeld &&
+      !this.vials.some((v) => v.isMoving) &&
+      !spoonActive &&
+      adjustedMX > helpBtnX - helpBtnSize / 2 &&
+      adjustedMX < helpBtnX + helpBtnSize / 2 &&
+      adjustedMY > helpBtnY - helpBtnSize / 2 &&
+      adjustedMY < helpBtnY + helpBtnSize / 2;
+
+    // Smooth hover scale
+    const targetHelpScale = isHelpHovered ? 1.06 : 1.0;
+    if (!paused)
+      this.helpButtonScale = lerp(this.helpButtonScale, targetHelpScale, 0.25);
+
+    push();
+    translate(helpBtnX, helpBtnY);
+    scale(this.helpButtonScale);
+    rectMode(CENTER);
+    // Fill and border colors: user requested final fill and border matching question mark
+    // Use a single static fill so hover does not change the color
+    const fillColor = "#F9E6C8"; // normalized to #F9E6C8 for both normal and hover
+    const markColor = "#5A331F"; // question-mark and border color
+    stroke(markColor);
+    strokeWeight(2);
+    fill(fillColor);
+    // Draw rounded square (curved corners)
+    rect(0, 0, helpBtnSize, helpBtnSize, 8);
+    // Question mark in dark brown for contrast; slightly smaller
+    noStroke();
+    fill(markColor);
+    textAlign(CENTER, CENTER);
+    textFont("VT323");
+    textSize(24);
+    text("?", 0, 0);
     pop();
 
     // Draw notification badge if unread
@@ -3367,17 +3445,7 @@ class Level {
         : defaultHoverColor
       : baseFillColor;
 
-    // Debug: Log button position and mouse info (remove later if not needed)
-    if (frameCount % 30 === 0) {
-      console.log(
-        `[Close Btn DRAW] Pos: (${btnX.toFixed(0)}, ${btnY.toFixed(0)}), Size: ${btnSize}, Hovered: ${isCloseBtnHovered}, OrderStarted: ${this.orderStarted}, Color: ${hoverColor}`,
-      );
-    }
-
     // Draw close button (drawn in BASE coords, will be scaled by drawLevel transform)
-    console.log(
-      `[Close Btn DRAW] Drawing at (${btnX}, ${btnY}), fillColor: ${hoverColor}`,
-    );
     rectMode(CENTER);
     noStroke();
     fill(hoverColor);
@@ -3805,6 +3873,7 @@ class Level {
           // and 'After the second.' left for better alignment.
           else if (v.label === "Mix, then end.") lx += 16;
           else if (v.label === "After the second.") lx -= 16;
+          else if (v.label === "Mix, then activate.") lx += 16;
           // Use centered alignment; choose vertical anchor per position
           if (v.label === "Nearly there.") {
             g.textAlign(CENTER, BOTTOM);
@@ -3886,7 +3955,7 @@ function drawLevel() {
   push();
   translate(offsetX, offsetY);
   scale(scaleFactor);
-  const paused = !!levelInstance.levelResult;
+  const paused = !!levelInstance.levelResult || levelInstance.isPaused;
   levelInstance.draw(paused);
   // If the level has a result, draw the results overlay (in BASE coords)
   if (levelInstance.levelResult && typeof Results !== "undefined") {
@@ -3896,15 +3965,31 @@ function drawLevel() {
 }
 
 function levelMousePressed() {
-  console.log(
-    "[levelMousePressed] Called - isRecipeOpen:",
-    levelInstance?.isRecipeOpen,
-  );
   if (!levelInstance) return;
 
   const { scaleFactor, offsetX, offsetY } = getScaleAndOffset();
   const adjustedX = (mouseX - offsetX) / scaleFactor;
   const adjustedY = (mouseY - offsetY) / scaleFactor;
+
+  // ---- New Item Overlay Button ----
+  if (levelInstance.showNewItemOverlay) {
+    const { x, y, w, h } = levelInstance.newItemButtonPos;
+    // Button position {x, y, w, h} uses top-left corner positioning (from rectMode CORNER)
+    if (
+      adjustedX > x &&
+      adjustedX < x + w &&
+      adjustedY > y &&
+      adjustedY < y + h
+    ) {
+      // Mark overlay as seen so it won't reappear or auto-advance later.
+      window._seenNewItemOverlay = true;
+      levelInstance.showNewItemOverlay = false;
+      return;
+    }
+    // Block all clicks while overlay is showing
+    return;
+  }
+
   // Consider spoon 'active' when picked up and moved away from its base
   const spoonActive =
     levelInstance.spoonIsHeld &&
@@ -4032,14 +4117,9 @@ function levelMousePressed() {
         levelInstance.mixStartedWhenAtMixStep &&
         !levelInstance.mixMeterComplete
       ) {
-        const expectedMixIndex = 4;
-        if (
-          (levelInstance.addedIngredients || []).length === expectedMixIndex
-        ) {
+        const ingredientCount = (levelInstance.addedIngredients || []).length;
+        if (ingredientCount === 4 || ingredientCount === 5) {
           levelInstance.sequenceInvalid = true;
-          console.log(
-            "Partial mix (unfinished) at required step — sequence marked invalid",
-          );
         }
       }
 
@@ -4117,7 +4197,8 @@ function levelMousePressed() {
             // so we can allow a partial mix as a valid non-mix.
             if (
               levelInstance.levelNumber === 2 &&
-              (levelInstance.addedIngredients || []).length === 4
+              ((levelInstance.addedIngredients || []).length === 4 ||
+                (levelInstance.addedIngredients || []).length === 5)
             ) {
               levelInstance.mixStartedWhenAtMixStep = true;
             }
@@ -4163,7 +4244,8 @@ function levelMousePressed() {
             levelInstance.spoonMouseStartY = 0;
             if (
               levelInstance.levelNumber === 2 &&
-              (levelInstance.addedIngredients || []).length === 4
+              ((levelInstance.addedIngredients || []).length === 4 ||
+                (levelInstance.addedIngredients || []).length === 5)
             ) {
               levelInstance.mixStartedWhenAtMixStep = true;
             }
@@ -4208,16 +4290,7 @@ function levelMousePressed() {
       vial.img = vial.openImg || vial.closedImg;
       vial.targetScale = vial.isCrystal ? 1.18 : 1.08;
 
-      // Trigger first vial guide on Level 1 (only on first pickup, after envelope clicked)
-      if (
-        levelInstance.levelNumber === 1 &&
-        !levelInstance.firstVialPickedUp &&
-        !vial.isCrystal &&
-        levelInstance.envelopeClicked
-      ) {
-        levelInstance.firstVialPickedUp = true;
-        levelInstance.firstVialGuideFadeInProgress = true;
-      }
+      // Level 1 first-vial tutorial removed
 
       // Play glass cling sound for all vials
       const glassSound = document.getElementById("glass-cling-sound");
@@ -4252,6 +4325,30 @@ function levelMousePressed() {
       (levelInstance.assets.envelopeImg.height /
         levelInstance.assets.envelopeImg.width) *
       env.w;
+
+    // Help button click handling (rounded square left of envelope)
+    const helpBtnSize = 40;
+    const helpBtnGap = 8;
+    const helpBtnExtraLeft = 28; // Updated position (nudged right 4px from 32)
+    const helpBtnX =
+      env.x - env.w / 2 - helpBtnSize / 2 - helpBtnGap - helpBtnExtraLeft;
+    const helpBtnY = env.y;
+    if (
+      adjustedX > helpBtnX - helpBtnSize / 2 &&
+      adjustedX < helpBtnX + helpBtnSize / 2 &&
+      adjustedY > helpBtnY - helpBtnSize / 2 &&
+      adjustedY < helpBtnY + helpBtnSize / 2
+    ) {
+      // Open instructions from help button: pause game and set flag
+      instrOpenedFromHelp = true;
+      previousScreenBeforeHelp = currentScreen;
+      if (levelInstance) {
+        levelInstance.isPaused = true;
+        levelInstance._helpPauseStart = millis();
+      }
+      currentScreen = "instr";
+      return;
+    }
     if (
       !spoonActive &&
       adjustedX > env.x - env.w / 2 &&
@@ -4271,12 +4368,7 @@ function levelMousePressed() {
         pageFlipSound.play().catch(() => {});
       }
 
-      // On Level 1, trigger fade-out of envelope guide and enable vial guide on first envelope click
-      if (levelInstance.levelNumber === 1 && !levelInstance.envelopeClicked) {
-        levelInstance.envelopeClicked = true;
-        levelInstance.envelopeGuideFadeInProgress = false;
-        levelInstance.envelopeGuideFadeOutProgress = true;
-      }
+      // Envelope click behaviour: open order panel (tutorial removed)
 
       return;
     }
@@ -4284,7 +4376,6 @@ function levelMousePressed() {
 
   // If intro modal is visible, handle its button click (block all other clicks)
   if (levelInstance.showRecipeIntro) {
-    console.log("[Intro Modal] showRecipeIntro is true - blocking all clicks");
     const b = levelInstance._recipeIntroBtn;
     if (b) {
       if (
@@ -4300,7 +4391,7 @@ function levelMousePressed() {
           levelInstance.flashlightUnlocked = true;
           levelInstance.flashlightActive = true;
           // Use a slightly smaller flashlight radius for post-unlock experience
-          levelInstance.flashlightRadius = 60;
+          levelInstance.flashlightRadius = 70;
         }
         return;
       }
@@ -4308,13 +4399,8 @@ function levelMousePressed() {
     return;
   }
 
-  console.log(
-    "[levelMousePressed] After intro modal check - about to check close button",
-  );
-
   // ---- Recipe Book Close Button ----
   if (levelInstance.isRecipeOpen) {
-    console.log("[Close Btn Handler] Entered - isRecipeOpen is true");
     const openBook = levelInstance.assets.recipeBookOpen;
     const bookWidth = 600;
     const bookHeight = (openBook.height / openBook.width) * bookWidth;
@@ -4332,11 +4418,6 @@ function levelMousePressed() {
     const adjustedBtnX = (mouseX - offsetX) / scaleFactor;
     const adjustedBtnY = (mouseY - offsetY) / scaleFactor;
 
-    // Debug: Log every click to see if we're in this handler
-    console.log(
-      `[Close Btn Click] Pos: (${btnX.toFixed(0)}, ${btnY.toFixed(0)}), Mouse(BASE): (${adjustedBtnX.toFixed(0)}, ${adjustedBtnY.toFixed(0)}), HitX: ${adjustedBtnX > btnX - btnSize / 2 && adjustedBtnX < btnX + btnSize / 2}, HitY: ${adjustedBtnY > btnY - btnSize / 2 && adjustedBtnY < btnY + btnSize / 2}`,
-    );
-
     // Check if click is within button bounds (in BASE coords)
     if (
       adjustedBtnX > btnX - btnSize / 2 &&
@@ -4344,7 +4425,6 @@ function levelMousePressed() {
       adjustedBtnY > btnY - btnSize / 2 &&
       adjustedBtnY < btnY + btnSize / 2
     ) {
-      console.log("[Close Btn Click] HIT - Closing recipe!");
       levelInstance.isRecipeOpen = false;
       return;
     }
@@ -4390,7 +4470,7 @@ function levelMousePressed() {
     if (levelInstance.levelNumber === 3 && levelInstance.flashlightUnlocked) {
       levelInstance.flashlightActive = true;
       // Ensure the unlocked flashlight uses the smaller radius
-      levelInstance.flashlightRadius = 60;
+      levelInstance.flashlightRadius = 70;
     }
     return;
   }
@@ -4422,28 +4502,9 @@ function levelKeyPressed() {
 
   // Debug: press 'T' to toggle flashlight overlay on Level 3 recipe
   if (key === "t" || key === "T") {
-    console.log(
-      "[Debug Key 'T'] Pressed - Level:",
-      levelInstance.levelNumber,
-      "RecipeOpen:",
-      levelInstance.isRecipeOpen,
-      "Current flashlight state:",
-      levelInstance.flashlightActive,
-    );
     if (levelInstance.levelNumber === 3 && levelInstance.isRecipeOpen) {
       levelInstance.flashlightActive = !levelInstance.flashlightActive;
-      console.log(
-        "[Debug] Flashlight toggled. Now:",
-        levelInstance.flashlightActive,
-      );
       return;
-    } else {
-      console.log(
-        "[Debug] Conditions not met for toggle - Level:",
-        levelInstance.levelNumber,
-        "RecipeOpen:",
-        levelInstance.isRecipeOpen,
-      );
     }
   }
 

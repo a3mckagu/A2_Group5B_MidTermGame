@@ -17,6 +17,9 @@ const LEVEL2_GLOW_FADE_SPEED = 0.12; // slightly faster glow fade
 // Hover animation state for Level 1 glow
 let level1GlowFade = 0;
 const LEVEL1_GLOW_FADE_SPEED = 0.12;
+// Hover animation state for Level 3 glow
+let level3GlowFade = 0;
+const LEVEL3_GLOW_FADE_SPEED = 0.12;
 
 // ========== HITBOX CONFIGURATION ==========
 // All hitboxes are centered on the map screen (BASE_W/2, BASE_H/2)
@@ -47,14 +50,7 @@ const LEVEL3_HITBOX = {
   rectHeight: 221,
 };
 
-// Next Level button in bottom left corner
-const NEXT_LEVEL_BUTTON = {
-  x: 80,
-  y: BASE_H - 40,
-  w: 140,
-  h: 50,
-  label: "Next Level",
-};
+// Legacy progression button removed — navigation controlled by level icons
 
 // ========== HITBOX DETECTION HELPERS ==========
 
@@ -187,6 +183,18 @@ function drawMap() {
     level2GlowFade = max(level2GlowFade - LEVEL2_GLOW_FADE_SPEED, 0);
   }
 
+  // Determine whether the mouse is hovering Level 3 specifically
+  const level3Hovered =
+    currentLevelNumber >= 3 &&
+    isPointInNormanWindow(adjustedMX, adjustedMY, LEVEL3_HITBOX);
+
+  // Animate level3 glow fade separately so it only appears on hover
+  if (level3Hovered) {
+    level3GlowFade = min(level3GlowFade + LEVEL3_GLOW_FADE_SPEED, 1);
+  } else {
+    level3GlowFade = max(level3GlowFade - LEVEL3_GLOW_FADE_SPEED, 0);
+  }
+
   // ============ HOVER GLOWS (unified shadowBlur for both levels) ============
   // Both levels use the same technique: fill the shape with shadowBlur.
   // The icon image drawn afterwards covers the opaque fill, leaving only
@@ -194,21 +202,67 @@ function drawMap() {
 
   // --- Level 2 glow (Norman window shape) ---
   if (level2GlowFade > 0.001) {
-    const glowW = LEVEL2_HITBOX.rectWidth - 6;
+    const glowW = LEVEL2_HITBOX.rectWidth;
     const glowH = LEVEL2_HITBOX.rectHeight - 6;
     const glowLeft = LEVEL2_HITBOX.centerX - glowW / 2;
-    const glowTop = LEVEL2_HITBOX.centerY - glowH;
+    // Nudge the glow slightly upward so it visually aligns with the icon
+    const glowTop = LEVEL2_HITBOX.centerY - glowH - 2;
     const glowCenterX = LEVEL2_HITBOX.centerX;
     const glowRadius = glowW / 2;
     const cornerRadius = 18;
 
     for (let pass = 0; pass < 3; pass++) {
       drawingContext.save();
-      drawingContext.shadowColor = `rgba(206,181,58,${(0.7 - pass * 0.15) * level2GlowFade})`;
-      drawingContext.shadowBlur = 12 + pass * 8;
+      drawingContext.shadowColor = `rgba(206,181,58,${(0.95 - pass * 0.18) * level2GlowFade})`;
+      drawingContext.shadowBlur = 14 + pass * 8;
       drawingContext.shadowOffsetX = 0;
       drawingContext.shadowOffsetY = 0;
-      drawingContext.fillStyle = `rgba(206,181,58,${0.7 * level2GlowFade})`;
+      drawingContext.fillStyle = `rgba(206,181,58,${0.9 * level2GlowFade})`;
+
+      drawingContext.beginPath();
+      drawingContext.moveTo(glowCenterX - glowRadius, glowTop);
+      drawingContext.arc(glowCenterX, glowTop, glowRadius, Math.PI, 0);
+      drawingContext.lineTo(glowLeft + glowW, glowTop + glowH - cornerRadius);
+      drawingContext.arcTo(
+        glowLeft + glowW,
+        glowTop + glowH,
+        glowLeft + glowW - cornerRadius,
+        glowTop + glowH,
+        cornerRadius,
+      );
+      drawingContext.lineTo(glowLeft + cornerRadius, glowTop + glowH);
+      drawingContext.arcTo(
+        glowLeft,
+        glowTop + glowH,
+        glowLeft,
+        glowTop + glowH - cornerRadius,
+        cornerRadius,
+      );
+      drawingContext.lineTo(glowLeft, glowTop + glowRadius);
+      drawingContext.closePath();
+      drawingContext.fill();
+      drawingContext.restore();
+    }
+  }
+
+  // --- Level 3 glow (Norman window shape, larger) ---
+  if (level3GlowFade > 0.001) {
+    const glowW = LEVEL3_HITBOX.rectWidth;
+    const glowH = LEVEL3_HITBOX.rectHeight - 6;
+    const glowLeft = LEVEL3_HITBOX.centerX - glowW / 2;
+    // Nudge the glow slightly upward so it visually aligns with the icon
+    const glowTop = LEVEL3_HITBOX.centerY - glowH - 2;
+    const glowCenterX = LEVEL3_HITBOX.centerX;
+    const glowRadius = glowW / 2;
+    const cornerRadius = 18;
+
+    for (let pass = 0; pass < 3; pass++) {
+      drawingContext.save();
+      drawingContext.shadowColor = `rgba(206,181,58,${(0.95 - pass * 0.18) * level3GlowFade})`;
+      drawingContext.shadowBlur = 14 + pass * 8;
+      drawingContext.shadowOffsetX = 0;
+      drawingContext.shadowOffsetY = 0;
+      drawingContext.fillStyle = `rgba(206,181,58,${0.9 * level3GlowFade})`;
 
       drawingContext.beginPath();
       drawingContext.moveTo(glowCenterX - glowRadius, glowTop);
@@ -240,7 +294,7 @@ function drawMap() {
   if (level1GlowFade > 0.001) {
     const glowCX = LEVEL1_HITBOX.centerX;
     const glowCY = LEVEL1_HITBOX.centerY;
-    const glowR = LEVEL1_HITBOX.radius;
+    const glowR = LEVEL1_HITBOX.radius + 2;
 
     for (let pass = 0; pass < 3; pass++) {
       drawingContext.save();
@@ -280,14 +334,7 @@ function drawMap() {
   textAlign(CENTER, CENTER);
   text("Alchemy Map", BASE_W / 2, BASE_H * 0.14);
 
-  // Draw the "Next Level" button in bottom left corner
-  drawButton({
-    x: NEXT_LEVEL_BUTTON.x,
-    y: NEXT_LEVEL_BUTTON.y,
-    w: NEXT_LEVEL_BUTTON.w,
-    h: NEXT_LEVEL_BUTTON.h,
-    label: NEXT_LEVEL_BUTTON.label,
-  });
+  // Legacy progression button removed; progression via level icons
 
   pop();
 
@@ -309,23 +356,7 @@ function mapMousePressed() {
   const adjustedMX = (mouseX - offsetX) / scaleFactor;
   const adjustedMY = (mouseY - offsetY) / scaleFactor;
 
-  // Check if the "Next Level" button was clicked
-  const buttonLeft = NEXT_LEVEL_BUTTON.x - NEXT_LEVEL_BUTTON.w / 2;
-  const buttonRight = NEXT_LEVEL_BUTTON.x + NEXT_LEVEL_BUTTON.w / 2;
-  const buttonTop = NEXT_LEVEL_BUTTON.y - NEXT_LEVEL_BUTTON.h / 2;
-  const buttonBottom = NEXT_LEVEL_BUTTON.y + NEXT_LEVEL_BUTTON.h / 2;
-
-  if (
-    adjustedMX >= buttonLeft &&
-    adjustedMX <= buttonRight &&
-    adjustedMY >= buttonTop &&
-    adjustedMY <= buttonBottom
-  ) {
-    // Next Level button was clicked - increment level
-    currentLevelNumber++;
-    // Stay on the map screen to show the updated level
-    return;
-  }
+  // Legacy progression control removed; progression handled via level icons
 
   // Determine which unlocked level (if any) was clicked and start it
   let clickedLevel = 0;
@@ -360,15 +391,10 @@ function mapMousePressed() {
 // ------------------------------------------------------------
 // Provides keyboard shortcuts:
 // - ENTER starts the game
-// - S returns to start menu
 // - ESC returns to start menu (handled globally)
 function mapKeyPressed() {
   if (keyCode === ENTER) {
     currentScreen = "level";
-  }
-
-  if (key === "s" || key === "S") {
-    currentScreen = "start";
   }
 }
 

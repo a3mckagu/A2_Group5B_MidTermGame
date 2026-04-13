@@ -412,7 +412,28 @@ function instrMousePressed() {
 
   const { x, y, w, h } = _instrBackBtn;
   if (mx > x - w / 2 && mx < x + w / 2 && my > y - h / 2 && my < y + h / 2) {
-    currentScreen = "start";
+    // If instructions were opened from help button, return to game (resume it)
+    // Otherwise return to start menu as normal
+    if (instrOpenedFromHelp) {
+      instrOpenedFromHelp = false;
+      if (levelInstance) {
+        // Shift patienceStart forward by the pause duration so the
+        // timer resumes exactly where it left off.
+        if (
+          levelInstance._helpPauseStart &&
+          levelInstance.patienceStart != null
+        ) {
+          const pauseDuration = millis() - levelInstance._helpPauseStart;
+          levelInstance.patienceStart += pauseDuration;
+        }
+        levelInstance._helpPauseStart = null;
+        levelInstance.isPaused = false;
+      }
+      currentScreen = previousScreenBeforeHelp || "level";
+      previousScreenBeforeHelp = null;
+    } else {
+      currentScreen = "start";
+    }
   }
 }
 
@@ -421,6 +442,25 @@ function instrMousePressed() {
 // ------------------------------
 function instrKeyPressed() {
   if (keyCode === ESCAPE) {
-    currentScreen = "start";
+    // If instructions were opened from help button, return to game (resume it)
+    // Otherwise return to start menu as normal
+    if (instrOpenedFromHelp) {
+      instrOpenedFromHelp = false;
+      if (levelInstance) {
+        if (
+          levelInstance._helpPauseStart &&
+          levelInstance.patienceStart != null
+        ) {
+          const pauseDuration = millis() - levelInstance._helpPauseStart;
+          levelInstance.patienceStart += pauseDuration;
+        }
+        levelInstance._helpPauseStart = null;
+        levelInstance.isPaused = false;
+      }
+      currentScreen = previousScreenBeforeHelp || "level";
+      previousScreenBeforeHelp = null;
+    } else {
+      currentScreen = "start";
+    }
   }
 }

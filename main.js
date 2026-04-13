@@ -22,9 +22,14 @@
 
 let currentScreen = "start";
 let currentLevelNumber = 1; // Track the current level (starts at level 1)
+let gameStarted = false; // Track if the player has started the game (reached a level)
 let levelData;
 let level;
 let levelInstance;
+
+// Track if instructions screen was opened from help button (vs. start menu)
+let instrOpenedFromHelp = false;
+let previousScreenBeforeHelp = null; // Store the screen to return to
 
 let potionaryLogo, potionaryLogoDetail, startBg, levelMenu;
 let levelBg1,
@@ -159,7 +164,8 @@ function preload() {
   mapIconsLevel3Default = loadImage(
     "assets/background/map-icons-default-lvl3.png",
   );
-  mapIconsLevel3Hover = loadImage("assets/background/map-icons-hover-lvl3.png");
+  // Hover variant removed: use the default image for hover state as well
+  mapIconsLevel3Hover = mapIconsLevel3Default;
 
   levelData = loadJSON("levels.json");
 
@@ -273,6 +279,7 @@ function createLevelInstance() {
 
 function jumpToLevel(levelNumber) {
   currentLevelNumber = levelNumber;
+  gameStarted = true; // Mark that the player has started playing a level
   createLevelInstance();
   currentScreen = "level";
   try {
@@ -314,7 +321,7 @@ function jumpToLevel2SecondRecipe() {
   levelInstance.orderStarted = true;
   levelInstance.hasUnreadOrder = false;
   levelInstance.currentSequenceIndex = 0;
-  levelInstance.completedSequences = [];
+  levelInstance.completedSequences = [false, false]; // Level 2 has 2 valid sequences
   levelInstance.sequenceResultsToDisplay = [];
   levelInstance.addedIngredients = [];
   levelInstance.crystalAdded = false;

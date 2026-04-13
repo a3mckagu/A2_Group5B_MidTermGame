@@ -48,7 +48,7 @@ function drawStart() {
     y: height * 0.52,
     w: btnWidth1,
     h: btnHeight,
-    label: currentLevelNumber > 1 ? "Resume" : "New Game",
+    label: gameStarted ? "Back to Map" : "New Game",
   };
 
   const instrBtn = {
@@ -120,9 +120,11 @@ function startMousePressed() {
   else if (isHover(instrBtn)) {
     currentScreen = "instr";
   } else if (isHover(quitBtn)) {
-    // If past level 1, reload the page; otherwise close the window
+    // If past level 1, restart the game; otherwise close the window
     if (currentLevelNumber > 1) {
-      location.reload();
+      currentLevelNumber = 1;
+      gameStarted = false; // Reset to show "New Game" on start screen
+      currentScreen = "start";
     } else {
       window.close();
     }
@@ -134,17 +136,12 @@ function startMousePressed() {
 // ------------------------------------------------------------
 // Provides keyboard shortcuts:
 // - ENTER starts the game
-// - I opens instructions
 function startKeyPressed() {
   if (keyCode === ENTER) {
     currentScreen = "map";
     try {
       restoreBgMusicVolume();
     } catch (e) {}
-  }
-
-  if (key === "g" || key === "G") {
-    currentScreen = "instr";
   }
 
   // ESC returns to start (already on start, so no action needed)

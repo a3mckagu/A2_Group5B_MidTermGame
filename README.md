@@ -1,4 +1,5 @@
 ## Assignment 2 - Mid-term Game: Potionary, A Crafting Puzzle Game
+
 ---
 
 ## Group Number
@@ -9,7 +10,11 @@
 
 ## Description
 
-Potionary is a potion-crafting puzzle game where players fulfill customer orders by matching symbols from a recipe book to ingredient vials. In the first level, players must add a specific sequence of five vials (from a shelf of twelve) to a cauldron in the correct order to succeed. A "Customer Patience" timer begins immediately, requiring players to carefully balance speed with accuracy.
+Potionary is a potion-crafting puzzle game where players fulfill customer orders by matching symbols from a recipe book to ingredient vials.
+
+- In the first level, players must add vials to a cauldron in the correct order to succeed. A "Customer Patience" timer begins immediately, requiring players to carefully balance speed with accuracy.
+
+- In the second level, a mixing mechanic is introduced. In addition to adding vials to the cauldron, players must
 
 The game is designed to foster empathy and understanding for individuals with dyslexia. For someone with dyslexia, reading can feel like decoding words in a foreign language - slow, effortful, and mentally exhausting. Even short periods of reading demand intense concentration. Potionary mirrors these experiences through symbols that are visually similar, a challenging-to-read font, and a recipe design that is intentionally difficult to interpret.
 
