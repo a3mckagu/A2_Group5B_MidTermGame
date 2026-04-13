@@ -1,4 +1,4 @@
-## Assignment 2 - Mid-term Game: Potionary, A Crafting Puzzle Game
+## Assignment 3 - Final Game: Potionary, A Crafting Puzzle Game
 
 ---
 
